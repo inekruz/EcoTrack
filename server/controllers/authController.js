@@ -221,21 +221,25 @@ export const getProfile = async (req, res) => {
       `
     SELECT
       id,
-      name,
-      email,
-      phone,
-      location,
-      bio,
-      avatar,
-      gender,
-      weight,
-      height,
-      age,
-      activity_level,
-      goal,
-      water_goal,
-      sleep_goal,
-      daily_calories,
+        username,
+        email,
+        password,
+
+        gender,
+        weight,
+        height,
+        age,
+
+        activity_level,
+        goal,
+
+        water_goal,
+        sleep_goal,
+
+        avatar,
+        bio,
+        location,
+        daily_calories
       created_at
     FROM users
     WHERE id = $1
@@ -257,59 +261,9 @@ export const updateProfile = async (req, res) => {
     const userId = req.user.id;
 
     const {
-      name,
-      phone,
-      location,
-      bio,
-      avatar,
-
-      gender,
-      weight,
-      height,
-      age,
-
-      activity_level,
-      goal,
-
-      water_goal,
-      sleep_goal,
-
-      daily_calories
-    } = req.body;
-
-    const result = await pool.query(
-      `
-      UPDATE users
-      SET
-        name = $1,
-        phone = $2,
-        location = $3,
-        bio = $4,
-        avatar = $5,
-
-        gender = $6,
-        weight = $7,
-        height = $8,
-        age = $9,
-
-        activity_level = $10,
-        goal = $11,
-
-        water_goal = $12,
-        sleep_goal = $13,
-
-        daily_calories = $14
-
-      WHERE id = $15
-
-      RETURNING *
-      `,
-      [
-        name,
-        phone,
-        location,
-        bio,
-        avatar,
+        username,
+        email,
+        password,
 
         gender,
         weight,
@@ -322,6 +276,59 @@ export const updateProfile = async (req, res) => {
         water_goal,
         sleep_goal,
 
+        avatar,
+        bio,
+        location,
+        daily_calories
+    } = req.body;
+
+    const result = await pool.query(
+      `
+      UPDATE users
+      SET
+        username=$1,
+        email=$2,
+        password=$3,
+
+        gender=$4,
+        weight=$5,
+        height=$6,
+        age=$7,
+
+        activity_level=$8,
+        goal=$9,
+
+        water_goal=$10,
+        sleep_goal=$11,
+
+        avatar=$12,
+        bio=$13,
+        location=$14,
+        daily_calories=$15
+
+      WHERE id = $16
+
+      RETURNING *
+      `,
+      [
+        username,
+        email,
+        password,
+
+        gender,
+        weight,
+        height,
+        age,
+
+        activity_level,
+        goal,
+
+        water_goal,
+        sleep_goal,
+
+        avatar,
+        bio,
+        location,
         daily_calories,
 
         userId
