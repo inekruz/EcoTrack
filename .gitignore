@@ -195,3 +195,5 @@ sw.*
 *.njsproj
 *.sln
 *.sw?
+
+server/.env

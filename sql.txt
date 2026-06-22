@@ -1,0 +1,217 @@
+-- ============================================================
+--  EcoTrack — PostgreSQL Schema
+--  Стек: Express.js + pg + bcrypt + jsonwebtoken + zod
+--
+--  Таблицы выведены из анализа структуры проекта:
+--    server/controllers : authController, foodEntryController, statController
+--    server/routes      : authRoutes, foodEntryRoutes, productRoutes, statRoutes
+--    client/components  : DiaryTab, NutritionTab, OverviewTab, ProfileTab,
+--                         ScannerTab, StatisticsTab, CaloriesCalculator
+-- ============================================================
+
+
+-- ------------------------------------------------------------
+-- 0. Расширения
+-- ------------------------------------------------------------
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";   -- для gen_random_uuid()
+
+
+-- ------------------------------------------------------------
+-- 1. USERS — аутентификация и профиль пользователя
+--    (authController.js + AuthContext.jsx + ProfileTab.jsx)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+    id              SERIAL          PRIMARY KEY,
+    username        VARCHAR(50)     NOT NULL UNIQUE,
+    email           VARCHAR(255)    NOT NULL UNIQUE,
+    password   VARCHAR(255)    NOT NULL,              -- bcrypt
+    full_name       VARCHAR(100),
+    avatar      TEXT,
+    age   int,
+    gender          VARCHAR(10)     CHECK (gender IN ('male', 'female', 'other')),
+    height       NUMERIC(5,1),                          -- рост в сантиметрах
+    weight       NUMERIC(5,2),                          -- текущий вес
+    activity_level  VARCHAR(20)     DEFAULT 'low'
+                    CHECK (activity_level IN ('low', 'medium', 'high')),
+    goal            VARCHAR(20)     DEFAULT 'lose'
+                    CHECK (goal IN ('lose', 'maintain', 'gain')),
+    daily_calories  INTEGER,                           -- CaloriesCalculator.jsx
+	water_goal NUMERIC(5,2),
+	sleep_goal NUMERIC(5,2),
+	bio text,
+	location text,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+-- Автообновление updated_at
+CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+
+-- ------------------------------------------------------------
+-- 2. PRODUCTS — база продуктов питания
+--    (productRoutes.js + ScannerTab.jsx + NutritionTab.jsx)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS products (
+    id              SERIAL          PRIMARY KEY,
+    barcode         VARCHAR(50)     UNIQUE,                -- сканер штрих-кодов
+    name            VARCHAR(255)    NOT NULL,
+    brand           VARCHAR(100),
+    category        VARCHAR(100),
+    -- нутриенты на 100 г продукта
+    calories_per_100g   NUMERIC(7,2) NOT NULL DEFAULT 0,
+    protein_per_100g    NUMERIC(6,2) NOT NULL DEFAULT 0,
+    fat_per_100g        NUMERIC(6,2) NOT NULL DEFAULT 0,
+    carbs_per_100g      NUMERIC(6,2) NOT NULL DEFAULT 0,
+    fiber_per_100g      NUMERIC(6,2),
+    sugar_per_100g      NUMERIC(6,2),
+    sodium_per_100g     NUMERIC(6,2),
+    -- мета
+    serving_size_g  NUMERIC(6,2),                         -- стандартная порция
+    is_verified     BOOLEAN         NOT NULL DEFAULT FALSE,
+    created_by      INTEGER         REFERENCES users(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE TRIGGER trg_products_updated_at
+BEFORE UPDATE ON products
+FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_products_barcode  ON products(barcode);
+CREATE INDEX IF NOT EXISTS idx_products_name     ON products(name);
+
+
+-- ------------------------------------------------------------
+-- 3. FOOD_ENTRIES — дневник питания
+--    (foodEntryController.js + foodEntryRoutes.js + DiaryTab.jsx)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS food_entries (
+    id              SERIAL          PRIMARY KEY,
+    user_id         INTEGER         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id      INTEGER         REFERENCES products(id) ON DELETE SET NULL,
+    -- если продукт введён вручную, без записи в products
+    custom_name     VARCHAR(255),
+    meal_type       VARCHAR(20)     NOT NULL
+                    CHECK (meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
+    entry_date      DATE            NOT NULL DEFAULT CURRENT_DATE,
+    amount_g        NUMERIC(7,2)    NOT NULL,              -- количество в граммах
+    -- денормализованные нутриенты (пересчитаны под amount_g)
+    calories        NUMERIC(7,2)    NOT NULL DEFAULT 0,
+    protein_g       NUMERIC(6,2)    NOT NULL DEFAULT 0,
+    fat_g           NUMERIC(6,2)    NOT NULL DEFAULT 0,
+    carbs_g         NUMERIC(6,2)    NOT NULL DEFAULT 0,
+    fiber_g         NUMERIC(6,2),
+    notes           TEXT,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    -- хотя бы одно из двух: продукт или кастомное название
+    CONSTRAINT chk_product_or_custom CHECK (
+        product_id IS NOT NULL OR custom_name IS NOT NULL
+    )
+);
+
+CREATE TRIGGER trg_food_entries_updated_at
+BEFORE UPDATE ON food_entries
+FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_food_entries_user_date
+    ON food_entries(user_id, entry_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_food_entries_user_meal
+    ON food_entries(user_id, meal_type);
+
+
+-- ------------------------------------------------------------
+-- 4. WEIGHT_LOGS — история веса
+--    (StatisticsTab.jsx + OverviewTab.jsx + statController.js)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS weight_logs (
+    id          SERIAL      PRIMARY KEY,
+    user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    weight_kg   NUMERIC(5,2) NOT NULL,
+    log_date    DATE        NOT NULL DEFAULT CURRENT_DATE,
+    notes       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE (user_id, log_date)    -- один замер в день
+);
+
+CREATE INDEX IF NOT EXISTS idx_weight_logs_user_date
+    ON weight_logs(user_id, log_date DESC);
+
+
+-- ------------------------------------------------------------
+-- 5. DAILY_STATS — агрегированная дневная статистика
+--    (statController.js + statRoutes.js + StatisticsTab.jsx + OverviewTab.jsx)
+--
+--    Можно обновлять триггером или пересчитывать через API;
+--    хранится для быстрой отдачи графиков.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS daily_stats (
+    id              SERIAL      PRIMARY KEY,
+    user_id         INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    stat_date       DATE        NOT NULL DEFAULT CURRENT_DATE,
+    -- нутриенты за день
+    total_calories  NUMERIC(8,2) NOT NULL DEFAULT 0,
+    total_protein_g NUMERIC(7,2) NOT NULL DEFAULT 0,
+    total_fat_g     NUMERIC(7,2) NOT NULL DEFAULT 0,
+    total_carbs_g   NUMERIC(7,2) NOT NULL DEFAULT 0,
+    total_fiber_g   NUMERIC(7,2),
+    -- цель на этот день (копируется из users при создании)
+    calorie_goal    INTEGER,
+    -- разбивка по приёмам пищи
+    breakfast_calories  NUMERIC(7,2) DEFAULT 0,
+    lunch_calories      NUMERIC(7,2) DEFAULT 0,
+    dinner_calories     NUMERIC(7,2) DEFAULT 0,
+    snack_calories      NUMERIC(7,2) DEFAULT 0,
+    -- вес, если был внесён в этот день
+    weight_kg       NUMERIC(5,2),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE (user_id, stat_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_stats_user_date
+    ON daily_stats(user_id, stat_date DESC);
+
+
+-- ------------------------------------------------------------
+-- 6. REFRESH_TOKENS — управление JWT refresh-токенами
+--    (authController.js + authMiddleware.js)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id          SERIAL      PRIMARY KEY,
+    user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token       TEXT        NOT NULL UNIQUE,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    revoked     BOOLEAN     NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user
+    ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token
+    ON refresh_tokens(token);
+
+
+-- ============================================================
+-- Итого таблицы:
+--   users          — аккаунты и профили
+--   products       — каталог продуктов (с поддержкой сканера)
+--   food_entries   — дневник питания
+--   weight_logs    — история изменения веса
+--   daily_stats    — агрегированная суточная статистика
+--   refresh_tokens — JWT refresh-токены
+-- ============================================================

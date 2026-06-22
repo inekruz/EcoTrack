@@ -11,7 +11,6 @@ import {
   FaStop,
   FaInfoCircle,
   FaSpinner,
-  FaShoppingBasket,
   FaClipboardList,
   FaLeaf,
   FaWeightHanging,
@@ -24,8 +23,6 @@ import {
   FaAppleAlt,
   FaCarrot,
   FaBoxOpen,
-  FaTag,
-  FaClock,
   FaChartLine,
   FaStar,
   FaSmile,
@@ -35,12 +32,11 @@ import {
   FaCheck,
   FaTimes,
   FaUtensils,
-  FaGlassWhiskey,
-  FaPercentage
+  FaGlassWhiskey
 } from 'react-icons/fa';
 
 function ScannerTab() {
-  const [scanMethod, setScanMethod] = useState('photo');
+  const [scanMethod, setScanMethod] = useState('barcode');
   const [scanning, setScanning] = useState(false);
   const [scannedProduct, setScannedProduct] = useState(null);
   const [error, setError] = useState(null);
@@ -50,72 +46,149 @@ function ScannerTab() {
   const [apiStatus, setApiStatus] = useState({ checking: true, available: false });
   const [manualBarcode, setManualBarcode] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
+  const [isScanningPaused, setIsScanningPaused] = useState(false);
+  const [browserSupport, setBrowserSupport] = useState({ barcodeDetector: false, mediaDevices: false });
+  const [scanProgress, setScanProgress] = useState(0);
   
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
+  const barcodeFileInputRef = useRef(null);
   const scanIntervalRef = useRef(null);
+  const canvasRef = useRef(null);
+  const imageRef = useRef(null);
+
+  // Проверка поддержки браузера
+  useEffect(() => {
+    const checkSupport = () => {
+      const support = {
+        barcodeDetector: 'BarcodeDetector' in window,
+        mediaDevices: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+      };
+      setBrowserSupport(support);
+      
+      if (!support.mediaDevices) {
+        setError('Ваш браузер не поддерживает доступ к камере. Используйте загрузку фото или ручной ввод.');
+      }
+    };
+    checkSupport();
+  }, []);
+
+  // Проверка API
+  useEffect(() => {
+    const checkApi = async () => {
+      try {
+        const response = await api.get('/products/4607096360009');
+        setApiStatus({ checking: false, available: response.status === 200 });
+      } catch (error) {
+        console.error('API check failed:', error);
+        setApiStatus({ checking: false, available: false });
+      }
+    };
+    checkApi();
+  }, []);
+
+  // Альтернативное распознавание через QuaggaJS (загружается динамически)
+  const loadQuaggaJS = () => {
+    return new Promise((resolve, reject) => {
+      if (window.Quagga) {
+        resolve(window.Quagga);
+        return;
+      }
+      
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js';
+      script.onload = () => {
+        if (window.Quagga) {
+          resolve(window.Quagga);
+        } else {
+          reject(new Error('Quagga не загрузился'));
+        }
+      };
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  };
 
   const searchProductByBarcode = async (barcode) => {
     setIsLoading(true);
     setError(null);
+    setScanProgress(30);
     
     try {
-      const response = await api.get(`/products/${barcode}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      // Проверяем кеш
+      const cachedProduct = sessionStorage.getItem(`product_${barcode}`);
+      if (cachedProduct) {
+        const product = JSON.parse(cachedProduct);
+        setScannedProduct(product);
+        setIsLoading(false);
+        setScanProgress(100);
+        return;
       }
+
+      setScanProgress(50);
+      const response = await api.get(`/products/${barcode}`);
+      setScanProgress(70);
       
-      const data = await response.json();
-      
-      if (data.status === 1 && data.product) {
-        const product = data.product;
-        const nutriments = product.nutriments || {};
+      if (response.status === 200) {
+        const data = response.data;
         
-        const productInfo = {
-          barcode: barcode,
-          name: product.product_name || product.generic_name || 'Название не указано',
-          brand: product.brands || 'Не указан',
-          quantity: product.quantity || 'Не указано',
-          categories: product.categories || 'Не указаны',
-          image: product.image_front_url || product.image_url || null,
-          categoryIcon: getCategoryIcon(product.categories),
-          nutriments: {
-            calories: nutriments['energy-kcal_100g'] || nutriments.energy_100g || 0,
-            protein: nutriments.proteins_100g || 0,
-            fat: nutriments.fat_100g || 0,
-            carbs: nutriments.carbohydrates_100g || 0,
-            sugars: nutriments.sugars_100g || 0,
-            fiber: nutriments.fiber_100g || 0,
-            salt: nutriments.salt_100g || 0
-          },
-          ingredients: product.ingredients_text || 'Информация отсутствует',
-          additives: product.additives_tags || [],
-          allergens: product.allergens_tags || [],
-          labels: product.labels_tags || [],
-          nutriscore: product.nutrition_grades || null,
-          timestamp: new Date().toLocaleString(),
-          type: 'barcode',
-          source: 'Open Food Facts'
-        };
-        
-        setScannedProduct(productInfo);
-        setShowManualInput(false);
-        setManualBarcode('');
+        if (data.status === 1 && data.product) {
+          const product = data.product;
+          const nutriments = product.nutriments || {};
+          
+          const productInfo = {
+            barcode: barcode,
+            name: product.product_name || product.generic_name || 'Название не указано',
+            brand: product.brands || 'Не указан',
+            quantity: product.quantity || 'Не указано',
+            categories: product.categories || 'Не указаны',
+            image: product.image_front_url || product.image_url || null,
+            categoryIcon: getCategoryIcon(product.categories),
+            nutriments: {
+              calories: nutriments['energy-kcal_100g'] || nutriments.energy_100g || 0,
+              protein: nutriments.proteins_100g || 0,
+              fat: nutriments.fat_100g || 0,
+              carbs: nutriments.carbohydrates_100g || 0,
+              sugars: nutriments.sugars_100g || 0,
+              fiber: nutriments.fiber_100g || 0,
+              salt: nutriments.salt_100g || 0
+            },
+            ingredients: product.ingredients_text || 'Информация отсутствует',
+            additives: product.additives_tags || [],
+            allergens: product.allergens_tags || [],
+            labels: product.labels_tags || [],
+            nutriscore: product.nutrition_grades || null,
+            timestamp: new Date().toLocaleString(),
+            type: 'barcode',
+            source: 'Open Food Facts'
+          };
+          
+          sessionStorage.setItem(`product_${barcode}`, JSON.stringify(productInfo));
+          setScannedProduct(productInfo);
+          setShowManualInput(false);
+          setManualBarcode('');
+          setScanProgress(100);
+        } else {
+          setError(`Продукт с штрихкодом ${barcode} не найден в базе Open Food Facts.`);
+          setScannedProduct(null);
+          setScanProgress(0);
+        }
       } else {
-        setError(`Продукт с штрихкодом ${barcode} не найден в базе Open Food Facts.`);
+        setError(`Не удалось найти продукт. Попробуйте позже.`);
         setScannedProduct(null);
+        setScanProgress(0);
       }
     } catch (err) {
       console.error('Ошибка API:', err);
       setError('Не удалось получить данные о продукте. Проверьте подключение к интернету.');
+      setScannedProduct(null);
+      setScanProgress(0);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Получение категории иконки
   const getCategoryIcon = (categories) => {
     if (!categories) return <FaBoxOpen />;
     const cat = categories.toLowerCase();
@@ -129,12 +202,23 @@ function ScannerTab() {
     return <FaBoxOpen />;
   };
 
-  // Запрос разрешения на камеру
   const requestCameraPermission = async () => {
+    if (!browserSupport.mediaDevices) {
+      setError('Ваш браузер не поддерживает доступ к камере.');
+      return false;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        } 
+      });
       stream.getTracks().forEach(track => track.stop());
       setCameraPermission(true);
+      setError(null);
       return true;
     } catch (err) {
       console.error('Ошибка доступа к камере:', err);
@@ -144,11 +228,117 @@ function ScannerTab() {
     }
   };
 
-  // Запуск сканера
+  // Метод сканирования с использованием BarcodeDetector (современные браузеры)
+  const scanWithBarcodeDetector = async () => {
+    try {
+      const barcodeDetector = new BarcodeDetector({ 
+        formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'codabar']
+      });
+      
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      
+      return new Promise((resolve) => {
+        let attempts = 0;
+        const maxAttempts = 50;
+        
+        scanIntervalRef.current = setInterval(async () => {
+          attempts++;
+          if (attempts > maxAttempts || isScanningPaused) {
+            return;
+          }
+          
+          if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+            try {
+              canvas.width = videoRef.current.videoWidth || 640;
+              canvas.height = videoRef.current.videoHeight || 480;
+              context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+              
+              const detections = await barcodeDetector.detect(canvas);
+              if (detections && detections.length > 0) {
+                const barcode = detections[0].rawValue;
+                if (barcode && barcode.length >= 8) {
+                  stopScanner();
+                  resolve(barcode);
+                }
+              }
+            } catch (err) {
+              console.error('Ошибка детекции:', err);
+            }
+          }
+        }, 500);
+      });
+    } catch (err) {
+      console.error('BarcodeDetector не поддерживается:', err);
+      return null;
+    }
+  };
+
+  // Метод сканирования с использованием QuaggaJS (старые браузеры)
+  const scanWithQuagga = async () => {
+    try {
+      const Quagga = await loadQuaggaJS();
+      
+      return new Promise((resolve) => {
+        Quagga.init({
+          inputStream: {
+            name: "Live",
+            type: "LiveStream",
+            target: videoRef.current,
+            constraints: {
+              facingMode: "environment",
+              width: 640,
+              height: 480
+            },
+          },
+          decoder: {
+            readers: [
+              "ean_reader",
+              "ean_8_reader",
+              "code_128_reader",
+              "code_39_reader",
+              "upc_reader",
+              "upc_e_reader"
+            ]
+          }
+        }, (err) => {
+          if (err) {
+            console.error('Quagga init error:', err);
+            resolve(null);
+            return;
+          }
+          
+          Quagga.start();
+          
+          Quagga.onDetected((result) => {
+            if (result && result.codeResult && result.codeResult.code) {
+              const barcode = result.codeResult.code;
+              if (barcode && barcode.length >= 8) {
+                Quagga.stop();
+                stopScanner();
+                resolve(barcode);
+              }
+            }
+          });
+        });
+        
+        // Таймаут на случай если Quagga не найдет штрихкод
+        setTimeout(() => {
+          Quagga.stop();
+          resolve(null);
+        }, 30000);
+      });
+    } catch (err) {
+      console.error('Quagga error:', err);
+      return null;
+    }
+  };
+
   const startScanner = async () => {
     setError(null);
     setScannedProduct(null);
     setShowManualInput(false);
+    setIsScanningPaused(false);
     
     const hasPermission = await requestCameraPermission();
     if (!hasPermission) return;
@@ -157,56 +347,56 @@ function ScannerTab() {
     
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        } 
       });
       
       streamRef.current = stream;
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        await videoRef.current.play();
       }
       
-      if ('BarcodeDetector' in window) {
-        const barcodeDetector = new BarcodeDetector({ 
-          formats: ['ean_13', 'ean_8', 'code_128', 'code_39'] 
-        });
-        
-        scanIntervalRef.current = setInterval(async () => {
-          if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-            try {
-              const canvas = document.createElement('canvas');
-              canvas.width = videoRef.current.videoWidth;
-              canvas.height = videoRef.current.videoHeight;
-              const context = canvas.getContext('2d');
-              context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-              
-              const detections = await barcodeDetector.detect(canvas);
-              if (detections.length > 0) {
-                stopScanner();
-                await searchProductByBarcode(detections[0].rawValue);
-              }
-            } catch (err) {
-              console.error('Ошибка детекции:', err);
-            }
-          }
-        }, 500);
+      let barcode = null;
+      
+      // Пробуем использовать BarcodeDetector
+      if (browserSupport.barcodeDetector) {
+        barcode = await scanWithBarcodeDetector();
+      }
+      
+      // Если BarcodeDetector не сработал, пробуем Quagga
+      if (!barcode) {
+        barcode = await scanWithQuagga();
+      }
+      
+      if (barcode) {
+        await searchProductByBarcode(barcode);
       } else {
-        setError('Ваш браузер не поддерживает сканирование штрихкодов. Пожалуйста, используйте ручной ввод или загрузку фото.');
-        stopScanner();
+        setError('Не удалось распознать штрихкод. Попробуйте загрузить фото или ввести вручную.');
+        setShowManualInput(true);
       }
     } catch (err) {
       console.error('Ошибка запуска сканера:', err);
-      setError('Не удалось запустить сканер. Пожалуйста, попробуйте ручной ввод.');
+      setError('Не удалось запустить сканер. Пожалуйста, попробуйте загрузить фото или ручной ввод.');
       setScanning(false);
     }
   };
 
-  // Остановка сканера
   const stopScanner = () => {
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current);
       scanIntervalRef.current = null;
+    }
+    
+    // Останавливаем Quagga если он запущен
+    if (window.Quagga) {
+      try {
+        window.Quagga.stop();
+      } catch (e) {}
     }
     
     if (streamRef.current) {
@@ -219,9 +409,13 @@ function ScannerTab() {
     }
     
     setScanning(false);
+    setIsScanningPaused(false);
   };
 
-  // Ручной ввод штрихкода
+  const toggleScanning = () => {
+    setIsScanningPaused(!isScanningPaused);
+  };
+
   const handleManualSubmit = async (e) => {
     e.preventDefault();
     if (!manualBarcode.trim()) {
@@ -238,7 +432,6 @@ function ScannerTab() {
     await searchProductByBarcode(manualBarcode.trim());
   };
 
-  // Обработка изменения поля ввода
   const handleManualBarcodeChange = (e) => {
     const value = e.target.value.replace(/\D/g, '');
     if (value.length <= 14) {
@@ -247,59 +440,110 @@ function ScannerTab() {
     }
   };
 
-  // Обработка загрузки изображения со штрихкодом
+  // Распознавание штрихкода на изображении с использованием различных методов
+  const detectBarcodeFromImage = async (imageData) => {
+    // Метод 1: BarcodeDetector
+    if (browserSupport.barcodeDetector) {
+      try {
+        const barcodeDetector = new BarcodeDetector({ 
+          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e']
+        });
+        const detections = await barcodeDetector.detect(imageData);
+        if (detections && detections.length > 0) {
+          return detections[0].rawValue;
+        }
+      } catch (err) {
+        console.error('BarcodeDetector error:', err);
+      }
+    }
+    
+    // Метод 2: QuaggaJS для изображений
+    try {
+      const Quagga = await loadQuaggaJS();
+      
+      return new Promise((resolve) => {
+        Quagga.decodeSingle({
+          src: imageData.src || imageData,
+          numOfWorkers: 0,
+          inputStream: {
+            size: 800
+          },
+          decoder: {
+            readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader", "upc_reader"]
+          }
+        }, (result) => {
+          if (result && result.codeResult && result.codeResult.code) {
+            resolve(result.codeResult.code);
+          } else {
+            resolve(null);
+          }
+        });
+      });
+    } catch (err) {
+      console.error('Quagga image error:', err);
+      return null;
+    }
+  };
+
   const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
     
-    setSelectedImage(URL.createObjectURL(file));
+    const objectUrl = URL.createObjectURL(file);
+    setSelectedImage(objectUrl);
     setError(null);
     setScannedProduct(null);
     setShowManualInput(false);
     setIsLoading(true);
+    setScanProgress(10);
     
     try {
       const img = new Image();
-      img.src = URL.createObjectURL(file);
+      img.src = objectUrl;
       
-      img.onload = async () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const context = canvas.getContext('2d');
-        context.drawImage(img, 0, 0, canvas.width, canvas.height);
-        
-        if ('BarcodeDetector' in window) {
-          const barcodeDetector = new BarcodeDetector({ 
-            formats: ['ean_13', 'ean_8', 'code_128', 'code_39'] 
-          });
-          const detections = await barcodeDetector.detect(canvas);
-          
-          if (detections.length > 0) {
-            await searchProductByBarcode(detections[0].rawValue);
-          } else {
-            setError('Не удалось распознать штрихкод на изображении. Пожалуйста, введите штрихкод вручную.');
-            setShowManualInput(true);
-          }
-        } else {
-          setError('Ваш браузер не поддерживает распознавание штрихкодов. Пожалуйста, введите штрихкод вручную.');
-          setShowManualInput(true);
-        }
-        
-        setIsLoading(false);
-        URL.revokeObjectURL(img.src);
-      };
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      
+      setScanProgress(30);
+      
+      // Создаем canvas для обработки
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const context = canvas.getContext('2d');
+      context.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      setScanProgress(50);
+      
+      // Пробуем распознать
+      const barcode = await detectBarcodeFromImage(canvas);
+      setScanProgress(70);
+      
+      if (barcode) {
+        await searchProductByBarcode(barcode);
+      } else {
+        setError('Не удалось распознать штрихкод на изображении. Пожалуйста, введите штрихкод вручную.');
+        setShowManualInput(true);
+        setScanProgress(0);
+      }
+      
+      URL.revokeObjectURL(objectUrl);
     } catch (err) {
       console.error('Ошибка:', err);
       setError('Не удалось распознать штрихкод на изображении.');
+      setScanProgress(0);
+    } finally {
       setIsLoading(false);
     }
   };
 
-  // AI анализ фото блюда (имитация)
   const analyzeFoodPhoto = async (file) => {
     setIsLoading(true);
+    setScanProgress(10);
     
+    // Имитация AI анализа
     setTimeout(() => {
       const mockAnalyses = [
         {
@@ -311,7 +555,16 @@ function ScannerTab() {
           confidence: 0.92,
           icon: <FaBreadSlice size={64} />,
           type: 'ai-analysis',
-          source: 'AI Analysis (Demo)'
+          source: 'AI Analysis (Demo)',
+          nutriments: {
+            calories: 320,
+            protein: 12,
+            fat: 8,
+            carbs: 52,
+            sugars: 15,
+            fiber: 6,
+            salt: 0.5
+          }
         },
         {
           name: 'Греческий салат',
@@ -322,7 +575,16 @@ function ScannerTab() {
           confidence: 0.88,
           icon: <FaCarrot size={64} />,
           type: 'ai-analysis',
-          source: 'AI Analysis (Demo)'
+          source: 'AI Analysis (Demo)',
+          nutriments: {
+            calories: 250,
+            protein: 8,
+            fat: 18,
+            carbs: 12,
+            sugars: 5,
+            fiber: 4,
+            salt: 0.8
+          }
         },
         {
           name: 'Куриная грудка с рисом',
@@ -333,11 +595,21 @@ function ScannerTab() {
           confidence: 0.95,
           icon: <FaUtensils size={64} />,
           type: 'ai-analysis',
-          source: 'AI Analysis (Demo)'
+          source: 'AI Analysis (Demo)',
+          nutriments: {
+            calories: 450,
+            protein: 35,
+            fat: 12,
+            carbs: 45,
+            sugars: 3,
+            fiber: 3,
+            salt: 1.2
+          }
         }
       ];
       
       const randomAnalysis = mockAnalyses[Math.floor(Math.random() * mockAnalyses.length)];
+      setScanProgress(100);
       
       setScannedProduct({
         ...randomAnalysis,
@@ -359,29 +631,31 @@ function ScannerTab() {
     await analyzeFoodPhoto(file);
   };
 
-  // Очистка результатов
   const clearResults = () => {
     setScannedProduct(null);
     setError(null);
     setSelectedImage(null);
     setManualBarcode('');
     setShowManualInput(false);
+    setScanProgress(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    if (barcodeFileInputRef.current) {
+      barcodeFileInputRef.current.value = '';
+    }
   };
 
-  // Добавление продукта в дневник
   const addToDiary = (product) => {
     alert(`✅ Продукт добавлен в дневник питания!
     
 📦 ${product.name}
 ${product.brand && product.brand !== 'Не указан' ? `🏷️ Бренд: ${product.brand}` : ''}
 ${product.barcode ? `🔢 Штрихкод: ${product.barcode}` : ''}
-🔥 ${product.nutriments?.calories || product.calories} ккал
-🥩 Белки: ${product.nutriments?.protein || product.protein} г
-🧈 Жиры: ${product.nutriments?.fat || product.fat} г
-🍚 Углеводы: ${product.nutriments?.carbs || product.carbs} г
+🔥 ${product.nutriments?.calories || product.calories || 0} ккал
+🥩 Белки: ${product.nutriments?.protein || product.protein || 0} г
+🧈 Жиры: ${product.nutriments?.fat || product.fat || 0} г
+🍚 Углеводы: ${product.nutriments?.carbs || product.carbs || 0} г
 ${product.source ? `\n📡 Источник: ${product.source}` : ''}
     
 Время: ${product.timestamp}`);
@@ -394,9 +668,35 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
     };
   }, []);
 
+  // Компонент индикатора прогресса
+  const ProgressBar = () => {
+    if (scanProgress === 0) return null;
+    return (
+      <div className="progress-bar-container">
+        <div className="progress-bar" style={{ width: `${scanProgress}%` }}>
+          <span className="progress-text">{scanProgress}%</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="scanner-wrapper">
       <div className="dashboard-card scanner-card">
+        {/* Информация о поддержке браузера */}
+        <div className="browser-support-info">
+          {!browserSupport.mediaDevices && (
+            <div className="api-status warning">
+              <FaExclamationTriangle /> Камера не поддерживается. Используйте загрузку фото.
+            </div>
+          )}
+          {browserSupport.mediaDevices && !browserSupport.barcodeDetector && (
+            <div className="api-status info">
+              <FaInfoCircle /> Используется альтернативный метод распознавания (QuaggaJS)
+            </div>
+          )}
+        </div>
+
         {!apiStatus.checking && apiStatus.available && (
           <div className="api-status success">
             <FaCheckCircle /> Open Food Facts API подключен
@@ -410,16 +710,6 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
 
         <div className="method-switch">
           <button 
-            className={scanMethod === 'photo' ? 'active' : ''}
-            onClick={() => {
-              setScanMethod('photo');
-              stopScanner();
-              clearResults();
-            }}
-          >
-            <FaCamera /> AI Анализ фото
-          </button>
-          <button 
             className={scanMethod === 'barcode' ? 'active' : ''}
             onClick={() => {
               setScanMethod('barcode');
@@ -429,40 +719,36 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
           >
             <FaBarcode /> Штрихкод
           </button>
+          <button 
+            className={scanMethod === 'photo' ? 'active' : ''}
+            onClick={() => {
+              setScanMethod('photo');
+              stopScanner();
+              clearResults();
+            }}
+          >
+            <FaCamera /> AI Анализ
+          </button>
         </div>
 
-        {scanMethod === 'photo' ? (
-          <div className="photo-analysis">
-            <FaCamera className="scanner-icon" />
-            <h2>AI Анализ блюда</h2>
-            <p>Загрузите фотографию блюда для анализа калорийности и состава</p>
-            
-            <div className="upload-area" onClick={() => fileInputRef.current?.click()}>
-              <FaUpload className="upload-icon" />
-              <div className="upload-text">
-                <strong>Нажмите для загрузки</strong> или перетащите фото сюда
-              </div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFoodPhotoUpload}
-                style={{ display: 'none' }}
-                ref={fileInputRef}
-              />
-            </div>
-          </div>
-        ) : (
+        {scanMethod === 'barcode' ? (
           <div className="barcode-scanner">
             <FaBarcode className="scanner-icon" />
             <h2>Сканер штрихкода</h2>
-            <p>Наведите камеру на штрихкод, загрузите фото или введите вручную</p>
+            <p>
+              {browserSupport.mediaDevices 
+                ? 'Наведите камеру на штрихкод, загрузите фото или введите вручную'
+                : 'Загрузите фото штрихкода или введите вручную'}
+            </p>
             
             {!scanning && !scannedProduct && !error && !isLoading && !showManualInput && (
               <div className="scanner-buttons">
-                <button className="primary-btn" onClick={startScanner}>
-                  <FaCameraRetro /> Запустить сканер
-                </button>
-                <button className="secondary-btn" onClick={() => fileInputRef.current?.click()}>
+                {browserSupport.mediaDevices && (
+                  <button className="primary-btn" onClick={startScanner}>
+                    <FaCameraRetro /> Запустить сканер
+                  </button>
+                )}
+                <button className="secondary-btn" onClick={() => barcodeFileInputRef.current?.click()}>
                   <FaUpload /> Загрузить фото
                 </button>
                 <button className="secondary-btn" onClick={() => setShowManualInput(true)}>
@@ -471,7 +757,6 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               </div>
             )}
 
-            {/* Форма ручного ввода */}
             {showManualInput && !scanning && (
               <div className="manual-input-form">
                 <div className="manual-input-header">
@@ -510,14 +795,37 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
             )}
             
             <div className={`scanner-container ${scanning ? 'active' : ''}`}>
-              <video ref={videoRef} className="scanner-video" playsInline autoPlay></video>
-              <div className="scanner-overlay">
-                <div className="scanner-frame"></div>
-              </div>
+              <video 
+                ref={videoRef} 
+                className="scanner-video" 
+                playsInline 
+                autoPlay
+                muted
+                style={{ display: scanning ? 'block' : 'none' }}
+              />
+              {!scanning && !showManualInput && (
+                <div className="scanner-placeholder">
+                  <FaBarcode size={48} />
+                  <p>
+                    {browserSupport.mediaDevices 
+                      ? 'Нажмите "Запустить сканер" для начала'
+                      : 'Загрузите фото штрихкода'}
+                  </p>
+                </div>
+              )}
+              {scanning && (
+                <div className="scanner-overlay">
+                  <div className="scanner-frame"></div>
+                  <div className="scanning-hint">Наведите на штрихкод</div>
+                </div>
+              )}
             </div>
             
             {scanning && (
               <div className="scanning-controls">
+                <button className="control-btn" onClick={toggleScanning}>
+                  {isScanningPaused ? '▶️ Продолжить' : '⏸️ Пауза'}
+                </button>
                 <button className="control-btn" onClick={() => {
                   stopScanner();
                   setShowManualInput(true);
@@ -530,6 +838,32 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               </div>
             )}
           </div>
+        ) : (
+          <div className="photo-analysis">
+            <FaCamera className="scanner-icon" />
+            <h2>AI Анализ блюда</h2>
+            <p>Загрузите фотографию блюда для анализа калорийности и состава</p>
+            
+            <div className="upload-area" onClick={() => fileInputRef.current?.click()}>
+              <FaUpload className="upload-icon" />
+              <div className="upload-text">
+                <strong>Нажмите для загрузки</strong> или перетащите фото сюда
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFoodPhotoUpload}
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+              />
+            </div>
+            
+            {selectedImage && scanMethod === 'photo' && (
+              <div className="preview-image">
+                <img src={selectedImage} alt="Загруженное фото" />
+              </div>
+            )}
+          </div>
         )}
 
         <input
@@ -537,13 +871,14 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
           accept="image/*"
           onChange={handleImageUpload}
           style={{ display: 'none' }}
-          ref={scanMethod === 'barcode' ? (el) => { if (el && !fileInputRef.current) fileInputRef.current = el; } : null}
+          ref={barcodeFileInputRef}
         />
 
         {isLoading && (
           <div className="loading-container">
             <FaSpinner className="spinner-large" />
             <p>Поиск информации о продукте...</p>
+            <ProgressBar />
           </div>
         )}
 
@@ -572,13 +907,13 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
                 {scannedProduct.brand && scannedProduct.brand !== 'Не указан' && (
                   <p className="product-brand"><FaStore /> {scannedProduct.brand}</p>
                 )}
-                {scannedProduct.quantity && (
+                {scannedProduct.quantity && scannedProduct.quantity !== 'Не указано' && (
                   <p className="product-weight"><FaWeightHanging /> {scannedProduct.quantity}</p>
                 )}
                 {scannedProduct.source && (
                   <p className="product-source"><FaQuestionCircle /> {scannedProduct.source}</p>
                 )}
-                {scannedProduct.type === 'ai-analysis' && (
+                {scannedProduct.type === 'ai-analysis' && scannedProduct.confidence && (
                   <p className="confidence"><FaStar /> Точность: {(scannedProduct.confidence * 100).toFixed(0)}%</p>
                 )}
                 {scannedProduct.nutriscore && (
@@ -589,7 +924,7 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               </div>
             </div>
 
-            {scannedProduct.categories && (
+            {scannedProduct.categories && scannedProduct.categories !== 'Не указаны' && (
               <div className="product-categories">
                 <FaClipboardList /> {scannedProduct.categories}
               </div>
@@ -599,42 +934,42 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               <div className="nutrient-item">
                 <span className="nutrient-label"><FaFire /> Калории</span>
                 <span className="nutrient-value">
-                  {scannedProduct.nutriments?.calories || scannedProduct.calories} ккал
+                  {scannedProduct.nutriments?.calories || scannedProduct.calories || 0} ккал
                 </span>
               </div>
               <div className="nutrient-item">
                 <span className="nutrient-label"><FaEgg /> Белки</span>
                 <span className="nutrient-value">
-                  {scannedProduct.nutriments?.protein || scannedProduct.protein} г
+                  {scannedProduct.nutriments?.protein || scannedProduct.protein || 0} г
                 </span>
               </div>
               <div className="nutrient-item">
                 <span className="nutrient-label"><FaCheese /> Жиры</span>
                 <span className="nutrient-value">
-                  {scannedProduct.nutriments?.fat || scannedProduct.fat} г
+                  {scannedProduct.nutriments?.fat || scannedProduct.fat || 0} г
                 </span>
               </div>
               <div className="nutrient-item">
                 <span className="nutrient-label"><FaBreadSlice /> Углеводы</span>
                 <span className="nutrient-value">
-                  {scannedProduct.nutriments?.carbs || scannedProduct.carbs} г
+                  {scannedProduct.nutriments?.carbs || scannedProduct.carbs || 0} г
                 </span>
               </div>
             </div>
 
-            {scannedProduct.nutriments && (
+            {(scannedProduct.nutriments?.fiber > 0 || scannedProduct.nutriments?.sugars > 0 || scannedProduct.nutriments?.salt > 0) && (
               <div className="extra-nutrition">
-                {scannedProduct.nutriments.fiber > 0 && (
+                {scannedProduct.nutriments?.fiber > 0 && (
                   <div className="extra-item">
                     <FaLeaf /> Клетчатка: {scannedProduct.nutriments.fiber} г
                   </div>
                 )}
-                {scannedProduct.nutriments.sugars > 0 && (
+                {scannedProduct.nutriments?.sugars > 0 && (
                   <div className="extra-item">
                     <FaSmile /> Сахар: {scannedProduct.nutriments.sugars} г
                   </div>
                 )}
-                {scannedProduct.nutriments.salt > 0 && (
+                {scannedProduct.nutriments?.salt > 0 && (
                   <div className="extra-item">
                     <FaTint /> Соль: {scannedProduct.nutriments.salt} г
                   </div>
@@ -660,13 +995,16 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               <h4>⚠️ Ошибка</h4>
               <p>{error}</p>
               <div className="error-actions">
-                {!cameraPermission && (
+                {!cameraPermission && scanMethod === 'barcode' && browserSupport.mediaDevices && (
                   <button className="retry-btn" onClick={requestCameraPermission}>
                     <FaRedoAlt /> Повторить запрос
                   </button>
                 )}
                 <button className="retry-btn" onClick={() => setShowManualInput(true)}>
                   <FaKeyboard /> Ввести вручную
+                </button>
+                <button className="retry-btn" onClick={() => barcodeFileInputRef.current?.click()}>
+                  <FaUpload /> Загрузить фото
                 </button>
               </div>
             </div>
