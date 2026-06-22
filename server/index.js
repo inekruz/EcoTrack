@@ -18,6 +18,14 @@ app.use('/api/products', productRoutes);
 app.use('/api/foodEntry', foodEntryRoutes)
 app.use('/api/stat', statRoutes)
 
+// testing
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'EcoTrack API is running 🚀'
+  })
+})
+
 const PORT = process.env.PORT || 5000
 
 app.listen(PORT, () => {
