@@ -403,7 +403,7 @@ function ScannerTab() {
           } catch (err) {
             console.error('Ошибка детекции:', err);
           }
-        }, 200); // Уменьшил интервал для более быстрого сканирования
+        }, 200);
       });
     } catch (err) {
       console.error('BarcodeDetector не поддерживается:', err);
@@ -521,21 +521,17 @@ function ScannerTab() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
         
-        // Пытаемся включить фокус
         await tryFocus();
         
-        // Запускаем отрисовку зеркального видео
         drawMirroredVideo();
       }
       
       let barcode = null;
       
-      // Сначала пробуем BarcodeDetector (быстрее)
       if (browserSupport.barcodeDetector) {
         barcode = await scanWithBarcodeDetector();
       }
       
-      // Если не сработало, пробуем Quagga (надёжнее)
       if (!barcode) {
         barcode = await scanWithQuagga();
       }
@@ -655,7 +651,6 @@ function ScannerTab() {
         });
         const detections = await barcodeDetector.detect(imageData);
         if (detections && detections.length > 0) {
-          // Ищем лучший результат
           for (const detection of detections) {
             if (detection.rawValue && detection.rawValue.length >= 8) {
               return detection.rawValue;
