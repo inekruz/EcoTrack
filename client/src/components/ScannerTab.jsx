@@ -49,7 +49,6 @@ function ScannerTab() {
   const [isScanningPaused, setIsScanningPaused] = useState(false);
   const [browserSupport, setBrowserSupport] = useState({ barcodeDetector: false, mediaDevices: false });
   const [scanProgress, setScanProgress] = useState(0);
-  const [isMirrored, setIsMirrored] = useState(true); // Добавляем состояние для зеркалирования
   
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -229,7 +228,7 @@ function ScannerTab() {
     }
   };
 
-  // Метод сканирования с использованием BarcodeDetector (современные браузеры)
+  // Оптимизированный метод сканирования с использованием BarcodeDetector
   const scanWithBarcodeDetector = async () => {
     try {
       const barcodeDetector = new BarcodeDetector({ 
@@ -254,7 +253,7 @@ function ScannerTab() {
               canvas.width = videoRef.current.videoWidth || 640;
               canvas.height = videoRef.current.videoHeight || 480;
               
-              // Рисуем с зеркалированием для правильного распознавания
+              // Отзеркаливание камеры для правильного отображения
               context.save();
               context.translate(canvas.width, 0);
               context.scale(-1, 1);
@@ -273,7 +272,7 @@ function ScannerTab() {
               console.error('Ошибка детекции:', err);
             }
           }
-        }, 500);
+        }, 300); // Уменьшил интервал для более быстрого сканирования
       });
     } catch (err) {
       console.error('BarcodeDetector не поддерживается:', err);
@@ -281,13 +280,13 @@ function ScannerTab() {
     }
   };
 
-  // Метод сканирования с использованием QuaggaJS (старые браузеры)
+  // Метод сканирования с использованием QuaggaJS
   const scanWithQuagga = async () => {
     try {
       const Quagga = await loadQuaggaJS();
       
       return new Promise((resolve) => {
-        // Quagga автоматически обрабатывает зеркалирование через настройки
+        // Настройка Quagga с поддержкой зеркалирования
         Quagga.init({
           inputStream: {
             name: "Live",
@@ -309,11 +308,12 @@ function ScannerTab() {
               "upc_e_reader"
             ]
           },
-          // Настройка зеркалирования для Quagga
           locator: {
             patchSize: "medium",
             halfSample: true
-          }
+          },
+          // Включаем зеркалирование для правильного отображения
+          mirror: true
         }, (err) => {
           if (err) {
             console.error('Quagga init error:', err);
@@ -407,7 +407,6 @@ function ScannerTab() {
       scanIntervalRef.current = null;
     }
     
-    // Останавливаем Quagga если он запущен
     if (window.Quagga) {
       try {
         window.Quagga.stop();
@@ -429,10 +428,6 @@ function ScannerTab() {
 
   const toggleScanning = () => {
     setIsScanningPaused(!isScanningPaused);
-  };
-
-  const toggleMirror = () => {
-    setIsMirrored(!isMirrored);
   };
 
   const handleManualSubmit = async (e) => {
@@ -459,7 +454,7 @@ function ScannerTab() {
     }
   };
 
-  // Распознавание штрихкода на изображении с использованием различных методов
+  // Распознавание штрихкода на изображении
   const detectBarcodeFromImage = async (imageData) => {
     // Метод 1: BarcodeDetector
     if (browserSupport.barcodeDetector) {
@@ -527,7 +522,6 @@ function ScannerTab() {
       
       setScanProgress(30);
       
-      // Создаем canvas для обработки
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
@@ -536,7 +530,6 @@ function ScannerTab() {
       
       setScanProgress(50);
       
-      // Пробуем распознать
       const barcode = await detectBarcodeFromImage(canvas);
       setScanProgress(70);
       
@@ -816,11 +809,14 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
             <div className={`scanner-container ${scanning ? 'active' : ''}`}>
               <video 
                 ref={videoRef} 
-                className={`scanner-video ${isMirrored ? 'mirrored' : ''}`}
+                className="scanner-video mirrored"
                 playsInline 
                 autoPlay
                 muted
-                style={{ display: scanning ? 'block' : 'none' }}
+                style={{ 
+                  display: scanning ? 'block' : 'none',
+                  transform: 'scaleX(-1)' // Постоянное зеркалирование
+                }}
               />
               {!scanning && !showManualInput && (
                 <div className="scanner-placeholder">
@@ -844,9 +840,6 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               <div className="scanning-controls">
                 <button className="control-btn" onClick={toggleScanning}>
                   {isScanningPaused ? '▶️ Продолжить' : '⏸️ Пауза'}
-                </button>
-                <button className="control-btn" onClick={toggleMirror}>
-                  {isMirrored ? '🔄 Зеркало Вкл' : '🔄 Зеркало Выкл'}
                 </button>
                 <button className="control-btn" onClick={() => {
                   stopScanner();
