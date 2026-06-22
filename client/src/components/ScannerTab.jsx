@@ -49,6 +49,7 @@ function ScannerTab() {
   const [isScanningPaused, setIsScanningPaused] = useState(false);
   const [browserSupport, setBrowserSupport] = useState({ barcodeDetector: false, mediaDevices: false });
   const [scanProgress, setScanProgress] = useState(0);
+  const [isMirrored, setIsMirrored] = useState(true); // Добавляем состояние для зеркалирования
   
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -252,7 +253,13 @@ function ScannerTab() {
             try {
               canvas.width = videoRef.current.videoWidth || 640;
               canvas.height = videoRef.current.videoHeight || 480;
+              
+              // Рисуем с зеркалированием для правильного распознавания
+              context.save();
+              context.translate(canvas.width, 0);
+              context.scale(-1, 1);
               context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+              context.restore();
               
               const detections = await barcodeDetector.detect(canvas);
               if (detections && detections.length > 0) {
@@ -280,6 +287,7 @@ function ScannerTab() {
       const Quagga = await loadQuaggaJS();
       
       return new Promise((resolve) => {
+        // Quagga автоматически обрабатывает зеркалирование через настройки
         Quagga.init({
           inputStream: {
             name: "Live",
@@ -300,6 +308,11 @@ function ScannerTab() {
               "upc_reader",
               "upc_e_reader"
             ]
+          },
+          // Настройка зеркалирования для Quagga
+          locator: {
+            patchSize: "medium",
+            halfSample: true
           }
         }, (err) => {
           if (err) {
@@ -324,7 +337,9 @@ function ScannerTab() {
         
         // Таймаут на случай если Quagga не найдет штрихкод
         setTimeout(() => {
-          Quagga.stop();
+          try {
+            Quagga.stop();
+          } catch (e) {}
           resolve(null);
         }, 30000);
       });
@@ -414,6 +429,10 @@ function ScannerTab() {
 
   const toggleScanning = () => {
     setIsScanningPaused(!isScanningPaused);
+  };
+
+  const toggleMirror = () => {
+    setIsMirrored(!isMirrored);
   };
 
   const handleManualSubmit = async (e) => {
@@ -797,7 +816,7 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
             <div className={`scanner-container ${scanning ? 'active' : ''}`}>
               <video 
                 ref={videoRef} 
-                className="scanner-video" 
+                className={`scanner-video ${isMirrored ? 'mirrored' : ''}`}
                 playsInline 
                 autoPlay
                 muted
@@ -825,6 +844,9 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               <div className="scanning-controls">
                 <button className="control-btn" onClick={toggleScanning}>
                   {isScanningPaused ? '▶️ Продолжить' : '⏸️ Пауза'}
+                </button>
+                <button className="control-btn" onClick={toggleMirror}>
+                  {isMirrored ? '🔄 Зеркало Вкл' : '🔄 Зеркало Выкл'}
                 </button>
                 <button className="control-btn" onClick={() => {
                   stopScanner();
