@@ -976,6 +976,10 @@
           width: 100%;
           height: auto;
           display: block;
+          transform: scaleX(-1); /* Зеркалирование видео */
+        }
+        .scanner-video.mirrored {
+          transform: scaleX(-1);
         }
         .scanner-overlay {
           position: absolute;
@@ -1386,4 +1390,39 @@
         .confidence {
           color: #4CAF50;
           font-weight: 600;
+        }
+        @media (max-width: 768px) {
+          .scanner-buttons {
+            flex-direction: column;
+          }
+          .method-switch {
+            flex-direction: column;
+          }
+          .scanning-controls {
+            flex-direction: column;
+          }
+          .input-actions {
+            flex-direction: column;
+          }
+          .product-info {
+            flex-direction: column;
+            align-items: center;
+          }
+          .product-details {
+            text-align: center;
+          }
+          .product-details p {
+            justify-content: center;
+          }
+          .scan-actions {
+            flex-direction: column;
+          }
+          .error-message {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+          }
+          .error-actions {
+            justify-content: center;
+          }
         }
