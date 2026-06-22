@@ -300,9 +300,6 @@ function DiaryTab() {
             <div className="empty-icon"><FaUtensils /></div>
             <h3>Нет записей</h3>
             <p>Добавьте свой первый приём пищи</p>
-            <button className="submit-btn" onClick={() => setShowAddModal(true)}>
-              <FaPlus /> Добавить приём пищи
-            </button>
           </div>
         ) : (
           <div className="entries-list">
