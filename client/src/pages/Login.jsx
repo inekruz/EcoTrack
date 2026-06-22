@@ -109,7 +109,7 @@ function Login() {
               }
             />
 
-            <button className="auth-btn">
+            <button className="auth-btn active">
               Войти
             </button>
 

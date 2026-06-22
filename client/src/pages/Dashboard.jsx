@@ -8,6 +8,7 @@ import ScannerTab from '../components/ScannerTab';
 import StatisticsTab from '../components/StatisticsTab';
 import ProfileTab from '../components/ProfileTab';
 import CaloriesCalculator from '../components/CaloriesCalculator';
+import ChatBotButton from '../components/ChatBotButton';
 
 function Dashboard() {
   const [activeTab, setActiveTab] = useState('scanner');
@@ -74,6 +75,7 @@ function Dashboard() {
           </button>
         ))}
       </nav>
+       <ChatBotButton />
     </div>
   );
 }

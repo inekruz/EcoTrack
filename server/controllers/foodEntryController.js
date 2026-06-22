@@ -18,7 +18,7 @@ export const addFoodEntry = async (req, res) => {
       manual_notes
     } = req.body
 
-    if (!meal_type || !product_name || !source_type || !portion_grams || !calories) {
+    if (!meal_type || !product_name || !source_type || !portion_grams || typeof calories !== 'number' || calories < 0) {
       return res.status(400).json({
         message: 'Заполните обязательные поля: meal_type, product_name, source_type, portion_grams, calories'
       })
@@ -34,8 +34,8 @@ export const addFoodEntry = async (req, res) => {
       return res.status(400).json({ message: 'Некорректный источник добавления' })
     }
 
-    if (portion_grams <= 0 || calories < 0) {
-      return res.status(400).json({ message: 'Порция и калории должны быть положительными числами' })
+    if (portion_grams <= 0) {
+      return res.status(400).json({ message: 'Порция должна быть положительным числом' })
     }
 
     const newEntry = await pool.query(

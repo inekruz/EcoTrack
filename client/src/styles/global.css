@@ -1862,3 +1862,299 @@ select {
   opacity: 0.6;
   pointer-events: none;
 }
+
+
+/* Красивый кастомный чекбокс */
+.terms-agreement {
+  margin: 20px 0 15px;
+}
+
+.custom-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  position: relative;
+  padding-left: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #555;
+}
+
+.custom-checkbox input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.custom-checkbox .checkmark {
+  position: relative;
+  height: 22px;
+  width: 22px;
+  min-width: 22px;
+  background-color: #fff;
+  border: 2px solid #d0d0d0;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-checkbox .checkmark:after {
+  content: '';
+  position: absolute;
+  display: none;
+  width: 6px;
+  height: 11px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  /* Убираем старые left/top */
+}
+
+.custom-checkbox input:checked ~ .checkmark {
+  background: linear-gradient(135deg, #43a047, #66bb6a);
+  border-color: #43a047;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.custom-checkbox input:checked ~ .checkmark:after {
+  display: block;
+}
+
+.custom-checkbox input:focus ~ .checkmark {
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
+}
+
+.custom-checkbox:hover .checkmark {
+  border-color: #43a047;
+}
+
+.terms-text {
+  color: #555;
+}
+
+.terms-text a {
+  color: #43a047;
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.terms-text a:hover {
+  border-bottom-color: #43a047;
+  color: #2e7d32;
+}
+
+/* Кнопка */
+.auth-btn {
+  width: 100%;
+  padding: 16px;
+  background: #e0e0e0;
+  color: #999;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: not-allowed;
+  transition: all 0.3s ease;
+  letter-spacing: 0.5px;
+  margin-top: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-btn.active {
+  background: linear-gradient(135deg, #43a047, #66bb6a);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.35);
+}
+
+.auth-btn.active:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(76, 175, 80, 0.45);
+}
+
+.auth-btn.active:active {
+  transform: translateY(0px);
+}
+
+.auth-btn.disabled {
+  background: #f0f0f0;
+  color: #bbb;
+  cursor: not-allowed;
+}
+
+/* Анимация кнопки при активации */
+.auth-btn.active::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.auth-btn.active:active::before {
+  width: 300px;
+  height: 300px;
+}
+
+/* Контейнер для кнопок */
+.hero-buttons {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 20px;
+}
+
+/* Базовые стили для всех кнопок */
+.hero-buttons button {
+    padding: 16px 40px;
+    font-size: 18px;
+    font-weight: 600;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    text-decoration: none; /* ← Убирает подчеркивание */
+}
+
+/* Основная кнопка (Primary) */
+.primary-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.primary-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(102, 126, 234, 0.6);
+}
+
+.primary-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
+}
+
+/* Эффект пульсации для Primary */
+.primary-btn::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 60%);
+    transform: scale(0);
+    transition: transform 0.5s;
+}
+
+.primary-btn:hover::after {
+    transform: scale(1);
+}
+
+/* Вторичная кнопка (Secondary) */
+.secondary-btn {
+    background: transparent;
+    color: #667eea;
+    border: 2px solid #667eea;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.1);
+}
+
+.secondary-btn:hover {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(102, 126, 234, 0.3);
+    border-color: transparent;
+}
+
+.secondary-btn:active {
+    transform: translateY(0);
+}
+
+/* Большие кнопки */
+.big-btn {
+    min-width: 200px;
+}
+
+/* Анимация появления */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.hero-buttons button {
+    animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.hero-buttons button:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.hero-buttons button:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+    .hero-buttons {
+        flex-direction: column;
+        gap: 15px;
+        padding: 15px;
+    }
+    
+    .hero-buttons button {
+        width: 100%;
+        max-width: 300px;
+        padding: 14px 30px;
+        font-size: 16px;
+    }
+}
+
+/* Дополнительный эффект наведения для обеих кнопок */
+.hero-buttons button:focus-visible {
+    outline: 3px solid #764ba2;
+    outline-offset: 3px;
+}
+
+/* Эффект при загрузке страницы */
+.hero-buttons button {
+    opacity: 0;
+}
+
+.hero-buttons button.loaded {
+    opacity: 1;
+}
+
+.hero-buttons a {
+    text-decoration: none;
+    display: inline-block;
+}
+
+.hero-buttons a button {
+    text-decoration: none;
+}

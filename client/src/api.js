@@ -16,6 +16,20 @@ api.interceptors.request.use(
   }
 )
 
+const getUserId = () => {
+  try {
+    const userData = localStorage.getItem('user')
+    if (userData) {
+      const parsed = JSON.parse(userData)
+      return parsed.user_id || null
+    }
+    return null
+  } catch (error) {
+    console.error('Ошибка при получении user_id:', error)
+    return null
+  }
+}
+
 export const getProfile = async () => {
   const response = await api.get('/auth/profile')
   return response.data
@@ -126,4 +140,88 @@ export const getAchievements = async (startDate, endDate) => {
   })
   return response.data
 }
+
+// Анализ фото через AI (отправка base64)
+export const analyzeFoodPhotoBase64 = async (base64Image) => {
+  const response = await api.post('/ai/analyze', {
+    image: base64Image
+  });
+  return response.data;
+};
+
+// Получение продукта по штрихкоду
+export const getProductByBarcode = async (barcode) => {
+  const response = await api.get(`/products/${barcode}`);
+  return response.data;
+};
+
+// Получение всех продуктов
+export const getAllFoods = async () => {
+  const response = await api.get('/foods');
+  return response.data;
+};
+
+// Получение продукта по ID
+export const getFoodById = async (id) => {
+  const response = await api.get(`/foods/${id}`);
+  return response.data;
+};
+
+// Получение истории питания
+export const getFoodHistory = async (params) => {
+  const response = await api.get('/foodHistory', { params });
+  return response.data;
+};
+
+
+
+// Отправить сообщение боту (с автоматическим получением userId)
+export const sendChatMessage = async (message, history = []) => {
+  const userId = getUserId()
+  const response = await api.post('/chat/message', {
+    message,
+    history,
+    userId
+  })
+  return response.data
+}
+
+// Получить быстрые подсказки
+export const getChatSuggestions = async () => {
+  const userId = getUserId()
+  const params = userId ? { userId } : {}
+  const response = await api.get('/chat/suggestions', { params })
+  return response.data
+}
+
+// Получить статистику пользователя для чата
+export const getUserChatStats = async () => {
+  const userId = getUserId()
+  if (!userId) {
+    throw new Error('Пользователь не авторизован')
+  }
+  const response = await api.get(`/chat/user/${userId}/stats`)
+  return response.data
+}
+
+// Проверить статус бота
+export const getChatStatus = async () => {
+  const response = await api.get('/chat/status')
+  return response.data
+}
+
+// Получить данные текущего пользователя
+export const getCurrentUser = () => {
+  try {
+    const userData = localStorage.getItem('user')
+    if (userData) {
+      return JSON.parse(userData)
+    }
+    return null
+  } catch (error) {
+    console.error('Ошибка при получении данных пользователя:', error)
+    return null
+  }
+}
+
 export default api

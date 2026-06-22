@@ -25,6 +25,8 @@ function Register() {
     sleep_goal: ''
   })
 
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
+
   const handleChange = (e) => {
     setForm({
       ...form,
@@ -32,8 +34,17 @@ function Register() {
     })
   }
 
+  const handleCheckboxChange = (e) => {
+    setAgreedToTerms(e.target.checked)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    if (!agreedToTerms) {
+      alert('Пожалуйста, примите условия оферты')
+      return
+    }
 
     try {
       const res = await api.post('/auth/register', form)
@@ -121,7 +132,6 @@ function Register() {
               />
             </div>
 
-            {/* ДОПОЛНИТЕЛЬНЫЕ (не обязательные) */}
             <input
               name="age"
               type="number"
@@ -157,8 +167,29 @@ function Register() {
               onChange={handleChange}
             />
 
-            <button className="auth-btn">
-              Создать аккаунт
+            <div className="terms-agreement">
+              <label className="custom-checkbox">
+                <input
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={handleCheckboxChange}
+                />
+                <span className="checkmark"></span>
+                <span className="terms-text">
+                  Я принимаю условия{' '}
+                  <Link to="/oferta" target="_blank">
+                    публичной оферты
+                  </Link>
+                </span>
+              </label>
+            </div>
+
+            <button 
+              className={`auth-btn ${agreedToTerms ? 'active' : 'disabled'}`}
+              type="submit"
+              disabled={!agreedToTerms}
+            >
+              {agreedToTerms ? 'Создать аккаунт' : 'Примите условия'}
             </button>
 
           </form>

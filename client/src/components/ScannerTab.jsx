@@ -1,5 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import api from '../api';
+import api, { 
+  analyzeFoodPhotoBase64,  // Изменено на base64 версию
+  getProductByBarcode,
+  addFoodEntry 
+} from '../api';
 import { 
   FaCamera, 
   FaBarcode, 
@@ -34,7 +38,11 @@ import {
   FaUtensils,
   FaGlassWhiskey,
   FaExpand,
-  FaCompress
+  FaCompress,
+  FaListUl,
+  FaInfo,
+  FaClock,
+  FaTag
 } from 'react-icons/fa';
 
 function ScannerTab() {
@@ -55,7 +63,16 @@ function ScannerTab() {
   const [isZoomed, setIsZoomed] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [focusMode, setFocusMode] = useState('continuous');
-  
+  const [aiAnalysisResult, setAiAnalysisResult] = useState(null);
+  const [showIngredients, setShowIngredients] = useState(false);
+  const [showAllergens, setShowAllergens] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({
+    nutrition: true,
+    ingredients: false,
+    allergens: false,
+    details: false
+  });
+
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -119,6 +136,7 @@ function ScannerTab() {
     });
   };
 
+  // ЕДИНСТВЕННАЯ ФУНКЦИЯ searchProductByBarcode
   const searchProductByBarcode = async (barcode) => {
     setIsLoading(true);
     setError(null);
@@ -135,55 +153,49 @@ function ScannerTab() {
       }
 
       setScanProgress(50);
-      const response = await api.get(`/products/${barcode}`);
+      
+      // Используем функцию из api.js
+      const data = await getProductByBarcode(barcode);
       setScanProgress(70);
       
-      if (response.status === 200) {
-        const data = response.data;
+      if (data.status === 1 && data.product) {
+        const product = data.product;
+        const nutriments = product.nutriments || {};
         
-        if (data.status === 1 && data.product) {
-          const product = data.product;
-          const nutriments = product.nutriments || {};
-          
-          const productInfo = {
-            barcode: barcode,
-            name: product.product_name || product.generic_name || 'Название не указано',
-            brand: product.brands || 'Не указан',
-            quantity: product.quantity || 'Не указано',
-            categories: product.categories || 'Не указаны',
-            image: product.image_front_url || product.image_url || null,
-            categoryIcon: getCategoryIcon(product.categories),
-            nutriments: {
-              calories: nutriments['energy-kcal_100g'] || nutriments.energy_100g || 0,
-              protein: nutriments.proteins_100g || 0,
-              fat: nutriments.fat_100g || 0,
-              carbs: nutriments.carbohydrates_100g || 0,
-              sugars: nutriments.sugars_100g || 0,
-              fiber: nutriments.fiber_100g || 0,
-              salt: nutriments.salt_100g || 0
-            },
-            ingredients: product.ingredients_text || 'Информация отсутствует',
-            additives: product.additives_tags || [],
-            allergens: product.allergens_tags || [],
-            labels: product.labels_tags || [],
-            nutriscore: product.nutrition_grades || null,
-            timestamp: new Date().toLocaleString(),
-            type: 'barcode',
-            source: 'Open Food Facts'
-          };
-          
-          sessionStorage.setItem(`product_${barcode}`, JSON.stringify(productInfo));
-          setScannedProduct(productInfo);
-          setShowManualInput(false);
-          setManualBarcode('');
-          setScanProgress(100);
-        } else {
-          setError(`Продукт с штрихкодом ${barcode} не найден в базе Open Food Facts.`);
-          setScannedProduct(null);
-          setScanProgress(0);
-        }
+        const productInfo = {
+          barcode: barcode,
+          name: product.product_name || product.generic_name || 'Название не указано',
+          brand: product.brands || 'Не указан',
+          quantity: product.quantity || 'Не указано',
+          categories: product.categories || 'Не указаны',
+          image: product.image_front_url || product.image_url || null,
+          categoryIcon: getCategoryIcon(product.categories),
+          nutriments: {
+            calories: nutriments['energy-kcal_100g'] || nutriments.energy_100g || 0,
+            protein: nutriments.proteins_100g || 0,
+            fat: nutriments.fat_100g || 0,
+            carbs: nutriments.carbohydrates_100g || 0,
+            sugars: nutriments.sugars_100g || 0,
+            fiber: nutriments.fiber_100g || 0,
+            salt: nutriments.salt_100g || 0
+          },
+          ingredients: product.ingredients_text || 'Информация отсутствует',
+          additives: product.additives_tags || [],
+          allergens: product.allergens_tags || [],
+          labels: product.labels_tags || [],
+          nutriscore: product.nutrition_grades || null,
+          timestamp: new Date().toLocaleString(),
+          type: 'barcode',
+          source: 'Open Food Facts'
+        };
+        
+        sessionStorage.setItem(`product_${barcode}`, JSON.stringify(productInfo));
+        setScannedProduct(productInfo);
+        setShowManualInput(false);
+        setManualBarcode('');
+        setScanProgress(100);
       } else {
-        setError(`Не удалось найти продукт. Попробуйте позже.`);
+        setError(`Продукт с штрихкодом ${barcode} не найден в базе Open Food Facts.`);
         setScannedProduct(null);
         setScanProgress(0);
       }
@@ -742,104 +754,137 @@ function ScannerTab() {
     }
   };
 
-  const analyzeFoodPhoto = async (file) => {
+  // ===== ФУНКЦИЯ ДЛЯ AI АНАЛИЗА С BASE64 =====
+  const analyzeFoodPhotoHandler = async (file) => {
     setIsLoading(true);
+    setError(null);
+    setAiAnalysisResult(null);
     setScanProgress(10);
     
-    setTimeout(() => {
-      const mockAnalyses = [
-        {
-          name: 'Овсяная каша с фруктами',
-          calories: 320,
-          protein: 12,
-          fat: 8,
-          carbs: 52,
-          confidence: 0.92,
-          icon: <FaBreadSlice size={64} />,
-          type: 'ai-analysis',
-          source: 'AI Analysis (Demo)',
-          nutriments: {
-            calories: 320,
-            protein: 12,
-            fat: 8,
-            carbs: 52,
-            sugars: 15,
-            fiber: 6,
-            salt: 0.5
-          }
-        },
-        {
-          name: 'Греческий салат',
-          calories: 250,
-          protein: 8,
-          fat: 18,
-          carbs: 12,
-          confidence: 0.88,
-          icon: <FaCarrot size={64} />,
-          type: 'ai-analysis',
-          source: 'AI Analysis (Demo)',
-          nutriments: {
-            calories: 250,
-            protein: 8,
-            fat: 18,
-            carbs: 12,
-            sugars: 5,
-            fiber: 4,
-            salt: 0.8
-          }
-        },
-        {
-          name: 'Куриная грудка с рисом',
-          calories: 450,
-          protein: 35,
-          fat: 12,
-          carbs: 45,
-          confidence: 0.95,
-          icon: <FaUtensils size={64} />,
-          type: 'ai-analysis',
-          source: 'AI Analysis (Demo)',
-          nutriments: {
-            calories: 450,
-            protein: 35,
-            fat: 12,
-            carbs: 45,
-            sugars: 3,
-            fiber: 3,
-            salt: 1.2
-          }
-        }
-      ];
-      
-      const randomAnalysis = mockAnalyses[Math.floor(Math.random() * mockAnalyses.length)];
-      setScanProgress(100);
-      
-      setScannedProduct({
-        ...randomAnalysis,
-        timestamp: new Date().toLocaleString(),
-        barcode: null
+    try {
+      // Конвертируем файл в base64
+      const base64Image = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
       });
+
+      setScanProgress(30);
+      console.log('📤 Отправка фото на сервер для AI анализа (base64)...');
       
+      // Используем функцию из api.js для отправки base64
+      const result = await analyzeFoodPhotoBase64(base64Image);
+
+      setScanProgress(80);
+      console.log('✅ Ответ от сервера:', result);
+
+      if (result.success && result.food) {
+        const foodData = result.food;
+        
+        // Форматируем данные для отображения
+        const formattedProduct = {
+          name: foodData.name || 'Неизвестное блюдо',
+          description: foodData.description || '',
+          ingredients: foodData.ingredients || [],
+          category: foodData.category || 'Не указана',
+          servingSize: foodData.servingSize || '100г',
+          cookingMethod: foodData.cookingMethod || 'Не указан',
+          allergens: foodData.allergens || [],
+          nutriments: {
+            calories: foodData.nutritionalInfo?.calories || 0,
+            protein: foodData.nutritionalInfo?.proteins || 0,
+            fat: foodData.nutritionalInfo?.fats || 0,
+            carbs: foodData.nutritionalInfo?.carbohydrates || 0,
+            fiber: foodData.nutritionalInfo?.fiber || 0,
+            sugars: foodData.nutritionalInfo?.sugar || 0,
+            salt: foodData.nutritionalInfo?.sodium || 0,
+            cholesterol: foodData.nutritionalInfo?.cholesterol || 0
+          },
+          image: URL.createObjectURL(file),
+          type: 'ai-analysis',
+          source: 'AI Анализ через OpenRouter',
+          timestamp: new Date().toLocaleString(),
+          id: foodData.id,
+          barcode: null,
+          confidence: 0.95
+        };
+        
+        setScannedProduct(formattedProduct);
+        setAiAnalysisResult(formattedProduct);
+        setScanProgress(100);
+      } else {
+        throw new Error(result.message || 'Не удалось распознать блюдо');
+      }
+      
+    } catch (err) {
+      console.error('❌ Ошибка AI анализа:', err);
+      
+      let errorMessage = 'Не удалось проанализировать фото. ';
+      
+      if (err.response) {
+        if (err.response.status === 404) {
+          errorMessage = 'На фото не найдены блюда или продукты. Попробуйте загрузить другое фото.';
+        } else if (err.response.status === 400) {
+          errorMessage = err.response.data?.message || 'Неверный формат изображения.';
+        } else if (err.response.status === 413) {
+          errorMessage = 'Файл слишком большой. Максимальный размер: 10MB';
+        } else {
+          errorMessage = err.response.data?.message || 'Ошибка сервера. Попробуйте позже.';
+        }
+      } else if (err.request) {
+        errorMessage = 'Нет ответа от сервера. Проверьте подключение к интернету.';
+      } else {
+        errorMessage = err.message || 'Произошла неизвестная ошибка.';
+      }
+      
+      setError(errorMessage);
+      setScanProgress(0);
+    } finally {
       setIsLoading(false);
-    }, 2000);
+    }
   };
 
   const handleFoodPhotoUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
     
+    // Проверяем размер файла (максимум 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Файл слишком большой. Максимальный размер: 10MB');
+      return;
+    }
+    
+    // Проверяем тип файла
+    if (!file.type.startsWith('image/')) {
+      setError('Пожалуйста, загрузите изображение');
+      return;
+    }
+    
     setSelectedImage(URL.createObjectURL(file));
     setError(null);
     setScannedProduct(null);
-    await analyzeFoodPhoto(file);
+    setAiAnalysisResult(null);
+    
+    await analyzeFoodPhotoHandler(file);
   };
 
   const clearResults = () => {
     setScannedProduct(null);
     setError(null);
     setSelectedImage(null);
+    setAiAnalysisResult(null);
     setManualBarcode('');
     setShowManualInput(false);
     setScanProgress(0);
+    setShowIngredients(false);
+    setShowAllergens(false);
+    setExpandedSections({
+      nutrition: true,
+      ingredients: false,
+      allergens: false,
+      details: false
+    });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -848,20 +893,73 @@ function ScannerTab() {
     }
   };
 
-  const addToDiary = (product) => {
-    alert(`✅ Продукт добавлен в дневник питания!
-    
-📦 ${product.name}
-${product.brand && product.brand !== 'Не указан' ? `🏷️ Бренд: ${product.brand}` : ''}
-${product.barcode ? `🔢 Штрихкод: ${product.barcode}` : ''}
-🔥 ${product.nutriments?.calories || product.calories || 0} ккал
-🥩 Белки: ${product.nutriments?.protein || product.protein || 0} г
-🧈 Жиры: ${product.nutriments?.fat || product.fat || 0} г
-🍚 Углеводы: ${product.nutriments?.carbs || product.carbs || 0} г
-${product.source ? `\n📡 Источник: ${product.source}` : ''}
-    
-Время: ${product.timestamp}`);
-    clearResults();
+  const addToDiary = async (product) => {
+    try {
+      if (!product || !product.name) {
+        setError('Нет данных о продукте для добавления');
+        return;
+      }
+
+      const getMealType = () => {
+        const hour = new Date().getHours();
+        if (hour >= 6 && hour < 11) return 'breakfast';
+        if (hour >= 11 && hour < 15) return 'lunch';
+        if (hour >= 15 && hour < 18) return 'snack';
+        if (hour >= 18 && hour < 23) return 'dinner';
+        return 'snack';
+      };
+
+      const entryData = {
+        meal_type: getMealType(),
+        eaten_at: new Date().toISOString(),
+        product_name: product.name,
+        source_type: product.type === 'ai-analysis' ? 'photo' : 'barcode',
+        portion_grams: 100,
+        calories: product.nutriments?.calories || 0,
+        protein: product.nutriments?.protein || 0,
+        fat: product.nutriments?.fat || 0,
+        carbs: product.nutriments?.carbs || 0,
+        barcode_value: product.barcode || null,
+        photo_url: product.image || null,
+        manual_notes: `Добавлено через ${product.type === 'ai-analysis' ? 'AI анализ' : 'сканер'}. Источник: ${product.source || 'Неизвестен'}`
+      };
+
+      setIsLoading(true);
+      setError(null);
+
+      // Используем функцию из api.js
+      await addFoodEntry(entryData);
+
+      alert(`✅ Продукт "${product.name}" успешно добавлен в дневник питания!`);
+      clearResults();
+      
+    } catch (err) {
+      console.error('Ошибка при добавлении в дневник:', err);
+      
+      let errorMessage = 'Не удалось добавить продукт в дневник. ';
+      if (err.response) {
+        errorMessage += err.response.data?.message || err.response.statusText || 'Ошибка сервера';
+      } else if (err.request) {
+        errorMessage += 'Нет ответа от сервера. Проверьте подключение к интернету.';
+      } else {
+        errorMessage += err.message || 'Неизвестная ошибка';
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Вспомогательная функция для отображения типа приёма пищи на русском
+  const getMealTypeLabel = (type) => {
+    const labels = {
+      breakfast: 'Завтрак',
+      lunch: 'Обед',
+      dinner: 'Ужин',
+      snack: 'Перекус'
+    };
+    return labels[type] || type;
   };
 
   useEffect(() => {
@@ -877,6 +975,92 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
         <div className="progress-bar" style={{ width: `${scanProgress}%` }}>
           <span className="progress-text">{scanProgress}%</span>
         </div>
+      </div>
+    );
+  };
+
+  // Компонент для отображения детальной информации о продукте
+  const ProductDetails = ({ product }) => {
+    if (!product) return null;
+    
+    return (
+      <div className="product-details-expanded">
+        {product.description && (
+          <div className="detail-section">
+            <h4><FaInfo /> Описание</h4>
+            <p>{product.description}</p>
+          </div>
+        )}
+        
+        {product.category && product.category !== 'Не указана' && (
+          <div className="detail-section">
+            <h4><FaTag /> Категория</h4>
+            <span className="category-tag">{product.category}</span>
+          </div>
+        )}
+        
+        {product.cookingMethod && product.cookingMethod !== 'Не указан' && (
+          <div className="detail-section">
+            <h4><FaUtensils /> Способ приготовления</h4>
+            <p>{product.cookingMethod}</p>
+          </div>
+        )}
+        
+        {product.servingSize && (
+          <div className="detail-section">
+            <h4><FaWeightHanging /> Размер порции</h4>
+            <span className="serving-size">{product.servingSize}</span>
+          </div>
+        )}
+        
+        {product.ingredients && product.ingredients.length > 0 && (
+          <div className="detail-section">
+            <h4 
+              className="section-header clickable"
+              onClick={() => setExpandedSections(prev => ({ ...prev, ingredients: !prev.ingredients }))}
+            >
+              <FaListUl /> Ингредиенты
+              <span className="toggle-icon">{expandedSections.ingredients ? '▲' : '▼'}</span>
+            </h4>
+            {expandedSections.ingredients && (
+              <div className="ingredients-list">
+                {product.ingredients.map((ingredient, index) => (
+                  <span key={index} className="ingredient-tag">{ingredient}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {product.allergens && product.allergens.length > 0 && (
+          <div className="detail-section">
+            <h4 
+              className="section-header clickable"
+              onClick={() => setExpandedSections(prev => ({ ...prev, allergens: !prev.allergens }))}
+            >
+              <FaExclamationTriangle /> Аллергены
+              <span className="toggle-icon">{expandedSections.allergens ? '▲' : '▼'}</span>
+            </h4>
+            {expandedSections.allergens && (
+              <div className="allergens-list">
+                {product.allergens.map((allergen, index) => (
+                  <span key={index} className="allergen-tag">{allergen}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {product.nutriments?.cholesterol > 0 && (
+          <div className="detail-section">
+            <h4><FaInfo /> Дополнительная информация</h4>
+            <div className="extra-info">
+              {product.nutriments.cholesterol > 0 && (
+                <span>Холестерин: {product.nutriments.cholesterol} мг</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1055,12 +1239,15 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
           <div className="photo-analysis">
             <FaCamera className="scanner-icon" />
             <h2>AI Анализ блюда</h2>
-            <p>Загрузите фотографию блюда для анализа калорийности и состава</p>
+            <p>Загрузите фотографию блюда для анализа состава и пищевой ценности</p>
             
             <div className="upload-area" onClick={() => fileInputRef.current?.click()}>
               <FaUpload className="upload-icon" />
               <div className="upload-text">
                 <strong>Нажмите для загрузки</strong> или перетащите фото сюда
+              </div>
+              <div className="upload-hint">
+                Поддерживаются: JPG, PNG, WebP (макс. 10MB)
               </div>
               <input
                 type="file"
@@ -1071,9 +1258,17 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               />
             </div>
             
-            {selectedImage && scanMethod === 'photo' && (
+            {selectedImage && scanMethod === 'photo' && !isLoading && (
               <div className="preview-image">
                 <img src={selectedImage} alt="Загруженное фото" />
+                <button className="remove-image" onClick={() => {
+                  setSelectedImage(null);
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                  }
+                }}>
+                  <FaTimes />
+                </button>
               </div>
             )}
           </div>
@@ -1090,7 +1285,11 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
         {isLoading && (
           <div className="loading-container">
             <FaSpinner className="spinner-large" />
-            <p>Поиск информации о продукте...</p>
+            <p> 
+              {scanMethod === 'photo' 
+                ? '🔄 Анализируем фото через AI...' 
+                : '🔍 Ищем информацию о продукте...'}
+            </p>
             <ProgressBar />
           </div>
         )}
@@ -1099,7 +1298,16 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
           <div className="scan-result">
             <div className="scan-result-header">
               <FaCheckCircle className="success-icon" />
-              <h3>{scannedProduct.type === 'ai-analysis' ? '🍽️ Блюдо распознано!' : '📦 Продукт найден!'}</h3>
+              <h3>
+                {scannedProduct.type === 'ai-analysis' 
+                  ? '🍽️ Блюдо успешно распознано!' 
+                  : '📦 Продукт найден!'}
+              </h3>
+              {scannedProduct.type === 'ai-analysis' && (
+                <span className="source-badge">
+                  <FaCamera /> AI Анализ
+                </span>
+              )}
             </div>
             
             <div className="product-info">
@@ -1123,9 +1331,6 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
                 {scannedProduct.quantity && scannedProduct.quantity !== 'Не указано' && (
                   <p className="product-weight"><FaWeightHanging /> {scannedProduct.quantity}</p>
                 )}
-                {scannedProduct.source && (
-                  <p className="product-source"><FaQuestionCircle /> {scannedProduct.source}</p>
-                )}
                 {scannedProduct.type === 'ai-analysis' && scannedProduct.confidence && (
                   <p className="confidence"><FaStar /> Точность: {(scannedProduct.confidence * 100).toFixed(0)}%</p>
                 )}
@@ -1133,6 +1338,9 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
                   <p className={`nutriscore nutriscore-${scannedProduct.nutriscore}`}>
                     <FaChartLine /> Nutri-Score: {scannedProduct.nutriscore.toUpperCase()}
                   </p>
+                )}
+                {scannedProduct.timestamp && (
+                  <p className="timestamp"><FaClock /> {scannedProduct.timestamp}</p>
                 )}
               </div>
             </div>
@@ -1144,33 +1352,35 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
             )}
             
             <div className="nutritional-info">
-              <div className="nutrient-item">
+              <div className="nutrient-item calories">
                 <span className="nutrient-label"><FaFire /> Калории</span>
                 <span className="nutrient-value">
-                  {scannedProduct.nutriments?.calories || scannedProduct.calories || 0} ккал
+                  {scannedProduct.nutriments?.calories || 0} ккал
                 </span>
               </div>
-              <div className="nutrient-item">
+              <div className="nutrient-item protein">
                 <span className="nutrient-label"><FaEgg /> Белки</span>
                 <span className="nutrient-value">
-                  {scannedProduct.nutriments?.protein || scannedProduct.protein || 0} г
+                  {scannedProduct.nutriments?.protein || 0} г
                 </span>
               </div>
-              <div className="nutrient-item">
+              <div className="nutrient-item fat">
                 <span className="nutrient-label"><FaCheese /> Жиры</span>
                 <span className="nutrient-value">
-                  {scannedProduct.nutriments?.fat || scannedProduct.fat || 0} г
+                  {scannedProduct.nutriments?.fat || 0} г
                 </span>
               </div>
-              <div className="nutrient-item">
+              <div className="nutrient-item carbs">
                 <span className="nutrient-label"><FaBreadSlice /> Углеводы</span>
                 <span className="nutrient-value">
-                  {scannedProduct.nutriments?.carbs || scannedProduct.carbs || 0} г
+                  {scannedProduct.nutriments?.carbs || 0} г
                 </span>
               </div>
             </div>
 
-            {(scannedProduct.nutriments?.fiber > 0 || scannedProduct.nutriments?.sugars > 0 || scannedProduct.nutriments?.salt > 0) && (
+            {(scannedProduct.nutriments?.fiber > 0 || 
+              scannedProduct.nutriments?.sugars > 0 || 
+              scannedProduct.nutriments?.salt > 0) && (
               <div className="extra-nutrition">
                 {scannedProduct.nutriments?.fiber > 0 && (
                   <div className="extra-item">
@@ -1189,7 +1399,12 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
                 )}
               </div>
             )}
-            
+
+            {/* Детальная информация для AI анализа */}
+            {scannedProduct.type === 'ai-analysis' && (
+              <ProductDetails product={scannedProduct} />
+            )}
+
             <div className="scan-actions">
               <button className="add-btn" onClick={() => addToDiary(scannedProduct)}>
                 + Добавить в дневник
@@ -1208,6 +1423,11 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               <h4>⚠️ Ошибка</h4>
               <p>{error}</p>
               <div className="error-actions">
+                {scanMethod === 'photo' && (
+                  <button className="retry-btn" onClick={() => fileInputRef.current?.click()}>
+                    <FaUpload /> Попробовать другое фото
+                  </button>
+                )}
                 {!cameraPermission && scanMethod === 'barcode' && browserSupport.mediaDevices && (
                   <button className="retry-btn" onClick={requestCameraPermission}>
                     <FaRedoAlt /> Повторить запрос

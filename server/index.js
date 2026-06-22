@@ -5,6 +5,8 @@ import authRoutes from './routes/authRoutes.js'
 import productRoutes from './routes/productRoutes.js';
 import foodEntryRoutes from './routes/foodEntryRoutes.js';
 import statRoutes from './routes/statRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
+import foodRoutes from './routes/foodRoutes.js';
 
 dotenv.config()
 
@@ -17,6 +19,8 @@ app.use('/api/auth', authRoutes)
 app.use('/api/products', productRoutes);
 app.use('/api/foodEntry', foodEntryRoutes)
 app.use('/api/stat', statRoutes)
+app.use('/api/chat', chatRoutes);
+app.use('/api/ai', foodRoutes);
 
 // testing
 app.get('/', (req, res) => {

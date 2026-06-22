@@ -1427,3 +1427,347 @@
             justify-content: center;
           }
         }
+
+
+        /* Добавьте в ваш CSS файл */
+
+.photo-upload-options {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+
+.upload-area {
+  border: 2px dashed #ccc;
+  border-radius: 12px;
+  padding: 40px 60px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f8f9fa;
+  flex: 1;
+  min-width: 200px;
+}
+
+.upload-area:hover {
+  border-color: #4CAF50;
+  background: #f0f8f0;
+}
+
+.upload-icon {
+  font-size: 48px;
+  color: #4CAF50;
+  margin-bottom: 10px;
+}
+
+.upload-text {
+  color: #666;
+}
+
+.camera-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-btn {
+  padding: 20px 40px;
+  font-size: 18px;
+  min-width: 200px;
+}
+
+.camera-container {
+  margin: 20px 0;
+}
+
+.camera-preview {
+  position: relative;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.camera-preview video {
+  display: block;
+  width: 100%;
+  max-height: 400px;
+  object-fit: cover;
+}
+
+.camera-controls {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.capture-btn {
+  padding: 12px 30px;
+  font-size: 18px;
+}
+
+.captured-photo-preview {
+  margin: 20px 0;
+}
+
+.captured-photo-preview img {
+  width: 100%;
+  max-width: 500px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  display: block;
+  margin: 0 auto;
+}
+
+.photo-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+.retake-btn, .analyze-btn {
+  padding: 10px 25px;
+  font-size: 16px;
+}
+
+.analyze-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.preview-image {
+  margin: 20px 0;
+  position: relative;
+}
+
+.preview-image img {
+  width: 100%;
+  max-width: 500px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+@media (max-width: 768px) {
+  .photo-upload-options {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .upload-area {
+    padding: 30px;
+    width: 100%;
+  }
+  
+  .camera-btn {
+    width: 100%;
+  }
+  
+  .camera-controls {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .photo-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+/* В ваш файл стилей */
+.product-details-expanded {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.detail-section {
+  margin-bottom: 1rem;
+}
+
+.detail-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.section-header.clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.section-header.clickable:hover {
+  color: #4a90d9;
+}
+
+.toggle-icon {
+  margin-left: auto;
+  font-size: 0.8rem;
+}
+
+.ingredients-list, .allergens-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.ingredient-tag {
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  border: 1px solid #a5d6a7;
+}
+
+.allergen-tag {
+  background: #ffebee;
+  color: #c62828;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  border: 1px solid #ef9a9a;
+}
+
+.category-tag {
+  display: inline-block;
+  background: #e3f2fd;
+  color: #1565c0;
+  padding: 0.3rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  border: 1px solid #90caf9;
+}
+
+.serving-size {
+  display: inline-block;
+  background: #fff3e0;
+  color: #e65100;
+  padding: 0.3rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  border: 1px solid #ffcc80;
+}
+
+.extra-info {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+}
+
+.extra-info span {
+  background: #f5f5f5;
+  padding: 0.2rem 0.8rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.2rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+}
+
+.upload-hint {
+  font-size: 0.75rem;
+  color: #999;
+  margin-top: 0.5rem;
+}
+
+.remove-image {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.remove-image:hover {
+  transform: scale(1.1);
+  background: #cc0000;
+}
+
+.preview-image {
+  position: relative;
+  display: inline-block;
+  margin: 1rem 0;
+  max-width: 100%;
+}
+
+.preview-image img {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.nutrient-item.calories .nutrient-value {
+  color: #ff6b35;
+  font-weight: bold;
+}
+
+.nutrient-item.protein .nutrient-value {
+  color: #4caf50;
+}
+
+.nutrient-item.fat .nutrient-value {
+  color: #ff9800;
+}
+
+.nutrient-item.carbs .nutrient-value {
+  color: #2196f3;
+}
+
+.scan-result-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.timestamp {
+  font-size: 0.75rem;
+  color: #999;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}

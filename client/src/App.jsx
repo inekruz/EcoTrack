@@ -9,6 +9,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import NotFound from './pages/NotFound'
+import Oferta from './pages/Oferta'
 
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -52,6 +53,8 @@ function App() {
             element={<NotFound />}
           />
 
+          <Route path="/oferta" element={<Oferta />} />
+          
         </Routes>
 
       </BrowserRouter>
