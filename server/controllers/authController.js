@@ -261,25 +261,25 @@ export const updateProfile = async (req, res) => {
     const userId = req.user.id;
 
     const {
-        username,
-        email,
-        password,
+      name,
+      email,
+      phone,
+      location,
+      bio,
+      avatar,
 
-        gender,
-        weight,
-        height,
-        age,
+      gender,
+      weight,
+      height,
+      age,
 
-        activity_level,
-        goal,
+      activity_level,
+      goal,
 
-        water_goal,
-        sleep_goal,
+      water_goal,
+      sleep_goal,
 
-        avatar,
-        bio,
-        location,
-        daily_calories
+      daily_calories
     } = req.body;
 
     const result = await pool.query(
@@ -311,25 +311,25 @@ export const updateProfile = async (req, res) => {
       RETURNING *
       `,
       [
-        username,
+      name,
         email,
-        password,
+      phone,
+      location,
+      bio,
+      avatar,
 
-        gender,
-        weight,
-        height,
-        age,
+      gender,
+      weight,
+      height,
+      age,
 
-        activity_level,
-        goal,
+      activity_level,
+      goal,
 
-        water_goal,
-        sleep_goal,
+      water_goal,
+      sleep_goal,
 
-        avatar,
-        bio,
-        location,
-        daily_calories,
+      daily_calories,
 
         userId
       ]
