@@ -647,6 +647,7 @@ select {
   color: var(--text);
   font-family: Inter, sans-serif;
   position: relative;
+  margin-bottom: 50px;
 }
 
 .sidebar {

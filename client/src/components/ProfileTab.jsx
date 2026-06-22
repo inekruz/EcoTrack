@@ -74,7 +74,7 @@ function ProfileTab() {
       const profile = response.data;
 
       const formattedData = {
-        name: profile?.name || '',
+        name: profile?.username || '',
         email: profile?.email || '',
         phone: profile?.phone || '',
         location: profile?.location || '',
@@ -123,6 +123,7 @@ function ProfileTab() {
     try {
       await api.put('/auth/profile', {
         name: tempData.name,
+        email: tempData.email,
         phone: tempData.phone,
         location: tempData.location,
         bio: tempData.bio,

@@ -1,6 +1,7 @@
 .profile-container {
   max-width: 1200px;
   margin: 0 auto;
+  margin-bottom: 50px;
 }
 
 .profile-header {
@@ -84,7 +85,6 @@
   font-size: 28px;
   font-weight: 700;
   color: var(--text);
-  margin-bottom: 8px;
 }
 
 .name-input {

@@ -232,29 +232,6 @@ function DiaryTab() {
 
   return (
     <div className="diary-container">
-      {/* Статистика за день */}
-      <div className="stats-grid">
-        <div className="stats-card">
-          <div className="stats-icon"><FaFire /></div>
-          <h3>{isNaN(summary.totalCalories) ? 0 : Math.round(summary.totalCalories)}</h3>
-          <p>ккал</p>
-        </div>
-        <div className="stats-card">
-          <div className="stats-icon"><FaDumbbell /></div>
-          <h3>{isNaN(summary.totalProtein) ? 0 : Math.round(summary.totalProtein)} г</h3>
-          <p>Белки</p>
-        </div>
-        <div className="stats-card">
-          <div className="stats-icon"><FaBreadSlice /></div>
-          <h3>{isNaN(summary.totalCarbs) ? 0 : Math.round(summary.totalCarbs)} г</h3>
-          <p>Углеводы</p>
-        </div>
-        <div className="stats-card">
-          <div className="stats-icon"><FaAppleAlt /></div>
-          <h3>{isNaN(summary.totalFat) ? 0 : Math.round(summary.totalFat)} г</h3>
-          <p>Жиры</p>
-        </div>
-      </div>
 
       {/* Навигация по датам */}
       <div className="date-navigation">
