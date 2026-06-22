@@ -927,7 +927,6 @@ function ScannerTab() {
       setIsLoading(true);
       setError(null);
 
-      // Используем функцию из api.js
       await addFoodEntry(entryData);
 
       alert(`✅ Продукт "${product.name}" успешно добавлен в дневник питания!`);

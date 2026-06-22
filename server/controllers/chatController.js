@@ -7,7 +7,6 @@ dotenv.config();
 
 // Список ключевых слов для фильтрации ЗОЖ-тематики
 const HEALTH_KEYWORDS = [
-  // Питание
   'калорий', 'калория', 'калории', 'ккал',
   'бжу', 'белки', 'жиры', 'углеводы',
   'диета', 'диет', 'питание', 'рацион',
@@ -15,23 +14,15 @@ const HEALTH_KEYWORDS = [
   'завтрак', 'обед', 'ужин', 'перекус',
   'вес', 'похудение', 'набор массы',
   'витамин', 'минерал', 'макроэлемент', 'микроэлемент',
-  
-  // Тренировки
   'тренировк', 'спорт', 'фитнес', 'упражнение',
   'кардио', 'силовой', 'йога', 'пилатес',
   'мышц', 'выносливость', 'сила',
-  
-  // Здоровье
   'здоров', 'сон', 'режим', 'вода', 'пить',
   'иммунитет', 'энергия', 'самочувствие',
   'детокс', 'очищение', 'метаболизм',
-  
-  // Конкретные продукты
   'овощ', 'фрукт', 'мясо', 'рыба', 'крупа',
   'молочн', 'яйцо', 'орех', 'масло',
   'сахар', 'соль', 'белок', 'клетчатк',
-  
-  // Запросы о себе
   'мой вес', 'мой рост', 'мой возраст', 'моя цель',
   'сколько мне', 'как мне', 'что мне',
 ];
@@ -161,7 +152,7 @@ const getWeekStats = async (userId) => {
   }
 };
 
-// Расчет BMR (базовый метаболизм) по формуле Миффлина-Сан Жеора
+// Расчет BMR
 const calculateBMR = (user) => {
   if (!user || !user.weight || !user.height || !user.age) return null;
   
@@ -171,33 +162,31 @@ const calculateBMR = (user) => {
   } else if (user.gender === 'female') {
     bmr = 10 * user.weight + 6.25 * user.height - 5 * user.age - 161;
   } else {
-    // Для неопределенного пола используем среднее значение
     bmr = 10 * user.weight + 6.25 * user.height - 5 * user.age;
   }
   return Math.round(bmr);
 };
 
-// Расчет дневной нормы калорий с учетом активности
+// Расчет дневной нормы калорий
 const calculateDailyCalories = (user) => {
   const bmr = calculateBMR(user);
   if (!bmr) return null;
   
   const activityMultipliers = {
-    'sedentary': 1.2,      // Малоподвижный
-    'light': 1.375,        // Легкая активность
-    'moderate': 1.55,      // Умеренная активность
-    'active': 1.725,       // Высокая активность
-    'very_active': 1.9     // Очень высокая активность
+    'sedentary': 1.2,
+    'light': 1.375,
+    'moderate': 1.55,
+    'active': 1.725,
+    'very_active': 1.9
   };
   
   const multiplier = activityMultipliers[user.activity_level] || 1.2;
   let dailyCalories = Math.round(bmr * multiplier);
   
-  // Корректировка в зависимости от цели
   if (user.goal === 'lose_weight') {
-    dailyCalories = Math.round(dailyCalories * 0.85); // Дефицит 15%
+    dailyCalories = Math.round(dailyCalories * 0.85);
   } else if (user.goal === 'gain_weight') {
-    dailyCalories = Math.round(dailyCalories * 1.15); // Профицит 15%
+    dailyCalories = Math.round(dailyCalories * 1.15);
   }
   
   return dailyCalories;
@@ -223,7 +212,6 @@ const getPersonalizedSystemPrompt = (user, todayStats, weekStats) => {
   
   Используй русский язык. Отвечай структурированно, по делу, без воды.`;
 
-  // Добавляем персональные данные пользователя
   if (user) {
     prompt += `\n\nИнформация о пользователе:`;
     
@@ -264,7 +252,6 @@ const getPersonalizedSystemPrompt = (user, todayStats, weekStats) => {
       prompt += `\n- Цель: ${goalMap[user.goal] || user.goal}`;
     }
     
-    // Добавляем рассчитанные показатели
     const bmr = calculateBMR(user);
     if (bmr) {
       prompt += `\n- Базовый метаболизм (BMR): ${bmr} ккал/день`;
@@ -284,7 +271,6 @@ const getPersonalizedSystemPrompt = (user, todayStats, weekStats) => {
     }
   }
 
-  // Добавляем статистику за сегодня
   if (todayStats) {
     prompt += `\n\nСтатистика питания за сегодня:`;
     prompt += `\n- Потреблено калорий: ${todayStats.total_calories} ккал`;
@@ -299,7 +285,6 @@ const getPersonalizedSystemPrompt = (user, todayStats, weekStats) => {
     }
   }
 
-  // Добавляем статистику за неделю
   if (weekStats && weekStats.length > 0) {
     const avgCalories = Math.round(weekStats.reduce((sum, day) => sum + day.total_calories, 0) / weekStats.length);
     prompt += `\n\nСтатистика за последние 7 дней:`;
@@ -310,7 +295,7 @@ const getPersonalizedSystemPrompt = (user, todayStats, weekStats) => {
   return prompt;
 };
 
-// Определение типа вопроса для более точного ответа
+// Определение типа вопроса
 const detectQuestionType = (message) => {
   const lowerMsg = message.toLowerCase();
   
@@ -345,12 +330,61 @@ const detectQuestionType = (message) => {
   return 'general';
 };
 
+// Функция для отправки запроса к OpenRouter с повторными попытками
+const callOpenRouter = async (messages, retries = 3) => {
+  const lastError = null;
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`📤 Попытка ${attempt} отправки запроса к OpenRouter...`);
+      
+      const response = await axios.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        {
+          model: 'openai/gpt-3.5-turbo',
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 800,
+          top_p: 0.9,
+          frequency_penalty: 0.5,
+          presence_penalty: 0.5,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': process.env.SITE_URL || 'https://ecotrack.ru',
+            'X-Title': 'EcoTrack ChatBot'
+          },
+          timeout: 30000
+        }
+      );
+      
+      console.log('✅ Успешный ответ от OpenRouter');
+      return response;
+      
+    } catch (error) {
+      console.error(`❌ Ошибка при попытке ${attempt}:`, error.message);
+      
+      // Если это последняя попытка, выбрасываем ошибку
+      if (attempt === retries) {
+        throw error;
+      }
+      
+      // Ждем перед следующей попыткой (экспоненциальная задержка)
+      const delay = Math.pow(2, attempt) * 1000;
+      console.log(`⏳ Ожидание ${delay}ms перед следующей попыткой...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+};
+
 // Основная функция обработки сообщения
 export const processChatMessage = async (req, res) => {
   try {
     const { message, userId, history = [] } = req.body;
     
-    // Валидация входящих данных
+    // Валидация
     if (!message || message.trim().length === 0) {
       return res.status(400).json({
         success: false,
@@ -365,7 +399,7 @@ export const processChatMessage = async (req, res) => {
       });
     }
     
-    // Проверка на спам/бессмысленные запросы
+    // Проверка на спам
     const isSpam = /(\d+\s*ра{1,2}\s*[сc]лов)|(привет\s*как\s*дела)|(расскажи\s*шутку)/gi.test(message);
     if (isSpam && !isHealthRelated(message)) {
       return res.status(400).json({
@@ -384,37 +418,31 @@ export const processChatMessage = async (req, res) => {
       });
     }
     
-    // Получение данных пользователя из БД
+    // Получение данных пользователя
     let userData = null;
     let todayStats = null;
     let weekStats = [];
-    let recentEntries = [];
     
     if (userId) {
       userData = await getUserData(userId);
       if (userData) {
         todayStats = await getTodayStats(userId);
         weekStats = await getWeekStats(userId);
-        recentEntries = await getUserRecentFoodEntries(userId, 3);
       }
     }
     
-    // Определение типа вопроса
     const questionType = detectQuestionType(message);
-    
-    // Формирование системного промпта с персональными данными
     const systemPrompt = getPersonalizedSystemPrompt(userData, todayStats, weekStats);
     
-    // Формирование сообщений для OpenRouter
     const messages = [
       { role: 'system', content: systemPrompt },
       ...history.slice(-5),
       { role: 'user', content: message }
     ];
     
-    // Проверка наличия API ключа
+    // Проверка API ключа
     if (!process.env.OPENROUTER_API_KEY) {
-      console.error('OPENROUTER_API_KEY не установлен в .env');
+      console.error('❌ OPENROUTER_API_KEY не установлен в .env');
       return res.status(500).json({
         success: false,
         message: 'Ошибка конфигурации сервера. Попробуйте позже.',
@@ -422,32 +450,24 @@ export const processChatMessage = async (req, res) => {
       });
     }
     
-    // Запрос к OpenRouter API
-    const response = await axios.post(
-      'https://openrouter.ai/api/v1/chat/completions',
-      {
-        model: 'openai/gpt-3.5-turbo',
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 800,
-        top_p: 0.9,
-        frequency_penalty: 0.5,
-        presence_penalty: 0.5,
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.SITE_URL || 'http://localhost:3000',
-          'X-Title': 'EcoTrack ChatBot'
-        },
-        timeout: 30000
-      }
-    );
+    // Отправка запроса к OpenRouter с повторными попытками
+    let response;
+    try {
+      response = await callOpenRouter(messages);
+    } catch (error) {
+      console.error('❌ Все попытки отправки к OpenRouter провалились');
+      
+      // Возвращаем заглушку вместо ошибки
+      return res.status(200).json({
+        success: true,
+        message: 'Извините, сервис временно недоступен. Но я могу дать общий совет: для здорового образа жизни важно соблюдать баланс в питании, пить достаточно воды и регулярно заниматься физической активностью. Попробуйте задать вопрос позже!',
+        isRejected: false,
+        fallback: true
+      });
+    }
     
     const botMessage = response.data.choices[0].message.content;
     
-    // Дополнительная информация для ответа
     const responseData = {
       success: true,
       message: botMessage,
@@ -459,7 +479,6 @@ export const processChatMessage = async (req, res) => {
       }
     };
     
-    // Если есть данные пользователя, добавляем персонализированную информацию
     if (userData) {
       responseData.userInfo = {
         name: userData.username,
@@ -472,7 +491,6 @@ export const processChatMessage = async (req, res) => {
         sleep_goal: userData.sleep_goal
       };
       
-      // Добавляем статистику за сегодня
       if (todayStats) {
         responseData.todayStats = {
           calories: todayStats.total_calories,
@@ -488,29 +506,14 @@ export const processChatMessage = async (req, res) => {
     return res.status(200).json(responseData);
     
   } catch (error) {
-    console.error('Ошибка в chatController:', error);
+    console.error('❌ Критическая ошибка в chatController:', error);
     
-    if (error.response) {
-      console.error('OpenRouter Error:', error.response.data);
-      return res.status(error.response.status || 500).json({
-        success: false,
-        message: 'Ошибка при обращении к ИИ. Попробуйте позже.',
-        isRejected: true
-      });
-    }
-    
-    if (error.code === 'ECONNABORTED') {
-      return res.status(504).json({
-        success: false,
-        message: 'Превышено время ожидания ответа. Попробуйте еще раз.',
-        isRejected: true
-      });
-    }
-    
-    return res.status(500).json({
-      success: false,
-      message: 'Внутренняя ошибка сервера. Попробуйте позже.',
-      isRejected: true
+    // Возвращаем понятную ошибку
+    return res.status(200).json({
+      success: true,
+      message: 'Извините, произошла техническая ошибка. Пожалуйста, переформулируйте вопрос или попробуйте позже. А пока помните: здоровое питание - это основа хорошего самочувствия!',
+      isRejected: false,
+      fallback: true
     });
   }
 };
@@ -559,8 +562,7 @@ export const getUserStats = async (req, res) => {
         metrics: {
           bmr: bmr,
           daily_calories: dailyCalories || userData.daily_calories,
-          current_weight: userData.weight,
-          goal_weight: null // можно добавить отдельное поле в таблицу
+          current_weight: userData.weight
         },
         today: todayStats,
         week: weekStats,
@@ -577,7 +579,7 @@ export const getUserStats = async (req, res) => {
   }
 };
 
-// Получение подсказок для быстрых ответов (персонализированные)
+// Получение подсказок для быстрых ответов
 export const getQuickSuggestions = async (req, res) => {
   try {
     const { userId } = req.query;
@@ -586,7 +588,6 @@ export const getQuickSuggestions = async (req, res) => {
     if (userId) {
       const userData = await getUserData(userId);
       if (userData) {
-        // Персонализированные подсказки на основе данных пользователя
         if (userData.weight && userData.goal) {
           const goalMap = {
             'lose_weight': 'похудеть',
@@ -612,7 +613,6 @@ export const getQuickSuggestions = async (req, res) => {
       }
     }
     
-    // Общие подсказки
     const generalSuggestions = [
       'Сколько калорий мне нужно в день?',
       'Как рассчитать БЖУ?',
@@ -626,10 +626,7 @@ export const getQuickSuggestions = async (req, res) => {
       'Что есть после тренировки?'
     ];
     
-    // Смешиваем персонализированные и общие подсказки
     suggestions = [...suggestions, ...generalSuggestions];
-    
-    // Уникальные и не более 8
     suggestions = [...new Set(suggestions)].slice(0, 8);
     
     return res.status(200).json({
@@ -649,13 +646,36 @@ export const getQuickSuggestions = async (req, res) => {
 // Получение статуса бота
 export const getChatStatus = async (req, res) => {
   try {
-    // Проверка подключения к БД
     await pool.query('SELECT 1');
+    
+    // Проверяем доступность OpenRouter API
+    let openRouterStatus = 'unknown';
+    try {
+      const testResponse = await axios.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        {
+          model: 'openai/gpt-3.5-turbo',
+          messages: [{ role: 'user', content: 'test' }],
+          max_tokens: 5
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 5000
+        }
+      );
+      openRouterStatus = testResponse.status === 200 ? 'available' : 'error';
+    } catch (error) {
+      openRouterStatus = 'unavailable';
+    }
     
     return res.status(200).json({
       status: 'online',
       version: '2.0.0',
       database: 'connected',
+      openRouter: openRouterStatus,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
