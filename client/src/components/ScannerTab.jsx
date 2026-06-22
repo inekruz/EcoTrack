@@ -32,7 +32,9 @@ import {
   FaCheck,
   FaTimes,
   FaUtensils,
-  FaGlassWhiskey
+  FaGlassWhiskey,
+  FaExpand,
+  FaCompress
 } from 'react-icons/fa';
 
 function ScannerTab() {
@@ -49,6 +51,10 @@ function ScannerTab() {
   const [isScanningPaused, setIsScanningPaused] = useState(false);
   const [browserSupport, setBrowserSupport] = useState({ barcodeDetector: false, mediaDevices: false });
   const [scanProgress, setScanProgress] = useState(0);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const [focusMode, setFocusMode] = useState('continuous');
   
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -58,6 +64,8 @@ function ScannerTab() {
   const scanIntervalRef = useRef(null);
   const animationFrameRef = useRef(null);
   const imageRef = useRef(null);
+  const lastDetectedBarcode = useRef(null);
+  const detectionCount = useRef(0);
 
   // Проверка поддержки браузера
   useEffect(() => {
@@ -212,8 +220,8 @@ function ScannerTab() {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           facingMode: 'environment',
-          width: { ideal: 640 },
-          height: { ideal: 480 }
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         } 
       });
       stream.getTracks().forEach(track => track.stop());
@@ -228,28 +236,61 @@ function ScannerTab() {
     }
   };
 
-  // Функция для отображения видео на canvas с зеркалированием
+  // Улучшенная функция отображения видео с зумом и фокусом
   const drawMirroredVideo = () => {
     if (!videoRef.current || !canvasRef.current) return;
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d', { 
+      willReadFrequently: true,
+      alpha: false
+    });
     
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      // Устанавливаем размеры canvas под видео
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      const videoWidth = video.videoWidth || 1280;
+      const videoHeight = video.videoHeight || 720;
+      
+      // Устанавливаем размеры canvas с учетом зума
+      const zoomFactor = isZoomed ? 1.5 : 1;
+      const displayWidth = Math.min(videoWidth, 800);
+      const displayHeight = (displayWidth / videoWidth) * videoHeight;
+      
+      canvas.width = displayWidth;
+      canvas.height = displayHeight;
       
       // Очищаем canvas
       context.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Рисуем зеркальное изображение
+      // Рассчитываем область для зума (центр изображения)
+      const cropWidth = videoWidth / zoomFactor;
+      const cropHeight = videoHeight / zoomFactor;
+      const startX = (videoWidth - cropWidth) / 2;
+      const startY = (videoHeight - cropHeight) / 2;
+      
+      // Рисуем зеркальное изображение с зумом
       context.save();
       context.translate(canvas.width, 0);
       context.scale(-1, 1);
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      if (isZoomed) {
+        // Приближенный режим - обрезаем и масштабируем
+        context.drawImage(
+          video, 
+          startX, startY, cropWidth, cropHeight,
+          0, 0, canvas.width, canvas.height
+        );
+      } else {
+        // Обычный режим
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      }
+      
       context.restore();
+      
+      // Применяем улучшение контрастности для лучшего распознавания
+      if (scanning && !isScanningPaused) {
+        enhanceImageContrast(context, canvas.width, canvas.height);
+      }
     }
     
     // Продолжаем анимацию
@@ -258,37 +299,111 @@ function ScannerTab() {
     }
   };
 
-  // Оптимизированный метод сканирования с использованием BarcodeDetector
+  // Улучшение контрастности изображения
+  const enhanceImageContrast = (context, width, height) => {
+    try {
+      const imageData = context.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      
+      // Увеличиваем контрастность
+      const contrast = 1.2;
+      const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+      
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = factor * (data[i] - 128) + 128;
+        data[i+1] = factor * (data[i+1] - 128) + 128;
+        data[i+2] = factor * (data[i+2] - 128) + 128;
+      }
+      
+      context.putImageData(imageData, 0, 0);
+    } catch (e) {
+      // Игнорируем ошибки контрастности
+    }
+  };
+
+  // Функция для попытки фокусировки
+  const tryFocus = async () => {
+    if (!streamRef.current) return;
+    
+    try {
+      const track = streamRef.current.getVideoTracks()[0];
+      if (track && track.getCapabilities) {
+        const capabilities = track.getCapabilities();
+        
+        // Пытаемся установить фокус
+        if (capabilities.focusMode) {
+          await track.applyConstraints({
+            advanced: [
+              { focusMode: 'continuous' },
+              { zoom: isZoomed ? 2.0 : 1.0 }
+            ]
+          });
+        }
+      }
+    } catch (err) {
+      console.log('Focus not supported:', err);
+    }
+  };
+
+  // Улучшенный метод сканирования с BarcodeDetector
   const scanWithBarcodeDetector = async () => {
     try {
       const barcodeDetector = new BarcodeDetector({ 
-        formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'codabar']
+        formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'codabar', 'code_93', 'itf']
       });
       
       return new Promise((resolve) => {
         let attempts = 0;
-        const maxAttempts = 50;
+        const maxAttempts = 100;
+        let bestBarcode = null;
+        let bestConfidence = 0;
         
         scanIntervalRef.current = setInterval(async () => {
           attempts++;
           if (attempts > maxAttempts || isScanningPaused || !canvasRef.current) {
+            if (bestBarcode && bestConfidence > 2) {
+              stopScanner();
+              resolve(bestBarcode);
+            }
             return;
           }
           
           try {
-            // Используем canvas с зеркальным изображением для распознавания
             const detections = await barcodeDetector.detect(canvasRef.current);
+            
             if (detections && detections.length > 0) {
-              const barcode = detections[0].rawValue;
-              if (barcode && barcode.length >= 8) {
-                stopScanner();
-                resolve(barcode);
+              // Ищем наиболее вероятный штрихкод
+              for (const detection of detections) {
+                const barcode = detection.rawValue;
+                const confidence = detection.cornerPoints ? 1 : 0;
+                
+                if (barcode && barcode.length >= 8) {
+                  // Проверяем, не повторяется ли штрихкод
+                  if (barcode === lastDetectedBarcode.current) {
+                    detectionCount.current++;
+                    // Если штрихкод обнаружен несколько раз подряд, считаем его правильным
+                    if (detectionCount.current >= 3) {
+                      stopScanner();
+                      resolve(barcode);
+                      return;
+                    }
+                  } else {
+                    lastDetectedBarcode.current = barcode;
+                    detectionCount.current = 1;
+                  }
+                  
+                  // Сохраняем лучший результат
+                  if (barcode.length >= 8 && barcode.length > bestConfidence) {
+                    bestBarcode = barcode;
+                    bestConfidence = barcode.length;
+                  }
+                }
               }
             }
           } catch (err) {
             console.error('Ошибка детекции:', err);
           }
-        }, 300);
+        }, 200); // Уменьшил интервал для более быстрого сканирования
       });
     } catch (err) {
       console.error('BarcodeDetector не поддерживается:', err);
@@ -296,13 +411,12 @@ function ScannerTab() {
     }
   };
 
-  // Метод сканирования с использованием QuaggaJS
+  // Метод сканирования с QuaggaJS (улучшенный)
   const scanWithQuagga = async () => {
     try {
       const Quagga = await loadQuaggaJS();
       
       return new Promise((resolve) => {
-        // Для Quagga используем video напрямую (он сам обрабатывает зеркалирование)
         Quagga.init({
           inputStream: {
             name: "Live",
@@ -310,8 +424,9 @@ function ScannerTab() {
             target: videoRef.current,
             constraints: {
               facingMode: "environment",
-              width: 640,
-              height: 480
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              aspectRatio: { ideal: 1.7777777778 }
             },
           },
           decoder: {
@@ -321,13 +436,17 @@ function ScannerTab() {
               "code_128_reader",
               "code_39_reader",
               "upc_reader",
-              "upc_e_reader"
-            ]
+              "upc_e_reader",
+              "codabar_reader",
+              "code_93_reader"
+            ],
+            multiple: false
           },
           locator: {
-            patchSize: "medium",
+            patchSize: "large",
             halfSample: true
-          }
+          },
+          numOfWorkers: 4
         }, (err) => {
           if (err) {
             console.error('Quagga init error:', err);
@@ -337,13 +456,24 @@ function ScannerTab() {
           
           Quagga.start();
           
+          let detectionCount = 0;
+          let lastBarcode = null;
+          
           Quagga.onDetected((result) => {
             if (result && result.codeResult && result.codeResult.code) {
               const barcode = result.codeResult.code;
               if (barcode && barcode.length >= 8) {
-                Quagga.stop();
-                stopScanner();
-                resolve(barcode);
+                if (barcode === lastBarcode) {
+                  detectionCount++;
+                  if (detectionCount >= 2) {
+                    Quagga.stop();
+                    stopScanner();
+                    resolve(barcode);
+                  }
+                } else {
+                  lastBarcode = barcode;
+                  detectionCount = 1;
+                }
               }
             }
           });
@@ -367,6 +497,8 @@ function ScannerTab() {
     setScannedProduct(null);
     setShowManualInput(false);
     setIsScanningPaused(false);
+    lastDetectedBarcode.current = null;
+    detectionCount.current = 0;
     
     const hasPermission = await requestCameraPermission();
     if (!hasPermission) return;
@@ -377,8 +509,9 @@ function ScannerTab() {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           facingMode: 'environment',
-          width: { ideal: 640 },
-          height: { ideal: 480 }
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          aspectRatio: { ideal: 1.7777777778 }
         } 
       });
       
@@ -387,18 +520,22 @@ function ScannerTab() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
-        // Запускаем отрисовку зеркального видео на canvas
+        
+        // Пытаемся включить фокус
+        await tryFocus();
+        
+        // Запускаем отрисовку зеркального видео
         drawMirroredVideo();
       }
       
       let barcode = null;
       
-      // Пробуем использовать BarcodeDetector (с canvas)
+      // Сначала пробуем BarcodeDetector (быстрее)
       if (browserSupport.barcodeDetector) {
         barcode = await scanWithBarcodeDetector();
       }
       
-      // Если BarcodeDetector не сработал, пробуем Quagga
+      // Если не сработало, пробуем Quagga (надёжнее)
       if (!barcode) {
         barcode = await scanWithQuagga();
       }
@@ -406,7 +543,7 @@ function ScannerTab() {
       if (barcode) {
         await searchProductByBarcode(barcode);
       } else {
-        setError('Не удалось распознать штрихкод. Попробуйте загрузить фото или ввести вручную.');
+        setError('Не удалось распознать штрихкод. Попробуйте приблизить камеру или загрузить фото.');
         setShowManualInput(true);
       }
     } catch (err) {
@@ -442,7 +579,6 @@ function ScannerTab() {
       videoRef.current.srcObject = null;
     }
     
-    // Очищаем canvas
     if (canvasRef.current) {
       const context = canvasRef.current.getContext('2d');
       context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -450,13 +586,38 @@ function ScannerTab() {
     
     setScanning(false);
     setIsScanningPaused(false);
+    lastDetectedBarcode.current = null;
+    detectionCount.current = 0;
   };
 
   const toggleScanning = () => {
     setIsScanningPaused(!isScanningPaused);
     if (!isScanningPaused) {
-      // Если возобновляем, перезапускаем отрисовку
       drawMirroredVideo();
+    }
+  };
+
+  const toggleZoom = () => {
+    setIsZoomed(!isZoomed);
+    setZoomLevel(isZoomed ? 1 : 1.5);
+  };
+
+  const toggleTorch = async () => {
+    if (!streamRef.current) return;
+    
+    try {
+      const track = streamRef.current.getVideoTracks()[0];
+      if (track && track.getCapabilities) {
+        const capabilities = track.getCapabilities();
+        if (capabilities.torch) {
+          await track.applyConstraints({
+            advanced: [{ torch: !torchOn }]
+          });
+          setTorchOn(!torchOn);
+        }
+      }
+    } catch (err) {
+      console.log('Torch not supported:', err);
     }
   };
 
@@ -484,34 +645,41 @@ function ScannerTab() {
     }
   };
 
-  // Распознавание штрихкода на изображении
+  // Распознавание штрихкода на изображении (улучшенное)
   const detectBarcodeFromImage = async (imageData) => {
+    // Метод 1: BarcodeDetector
     if (browserSupport.barcodeDetector) {
       try {
         const barcodeDetector = new BarcodeDetector({ 
-          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e']
+          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'codabar', 'code_93', 'itf']
         });
         const detections = await barcodeDetector.detect(imageData);
         if (detections && detections.length > 0) {
-          return detections[0].rawValue;
+          // Ищем лучший результат
+          for (const detection of detections) {
+            if (detection.rawValue && detection.rawValue.length >= 8) {
+              return detection.rawValue;
+            }
+          }
         }
       } catch (err) {
         console.error('BarcodeDetector error:', err);
       }
     }
     
+    // Метод 2: QuaggaJS для изображений
     try {
       const Quagga = await loadQuaggaJS();
       
       return new Promise((resolve) => {
         Quagga.decodeSingle({
           src: imageData.src || imageData,
-          numOfWorkers: 0,
+          numOfWorkers: 4,
           inputStream: {
             size: 800
           },
           decoder: {
-            readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader", "upc_reader"]
+            readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader", "upc_reader", "codabar_reader"]
           }
         }, (result) => {
           if (result && result.codeResult && result.codeResult.code) {
@@ -564,7 +732,7 @@ function ScannerTab() {
       if (barcode) {
         await searchProductByBarcode(barcode);
       } else {
-        setError('Не удалось распознать штрихкод на изображении. Пожалуйста, введите штрихкод вручную.');
+        setError('Не удалось распознать штрихкод на изображении. Попробуйте загрузить более четкое фото.');
         setShowManualInput(true);
         setScanProgress(0);
       }
@@ -774,7 +942,7 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
             <h2>Сканер штрихкода</h2>
             <p>
               {browserSupport.mediaDevices 
-                ? 'Наведите камеру на штрихкод, загрузите фото или введите вручную'
+                ? 'Наведите камеру на штрихкод, используйте зум для лучшего распознавания'
                 : 'Загрузите фото штрихкода или введите вручную'}
             </p>
             
@@ -832,7 +1000,6 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
             )}
             
             <div className={`scanner-container ${scanning ? 'active' : ''}`}>
-              {/* Видео скрыто, используется только для захвата */}
               <video 
                 ref={videoRef} 
                 playsInline 
@@ -840,7 +1007,6 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
                 muted
                 style={{ display: 'none' }}
               />
-              {/* Canvas для отображения зеркального видео */}
               <canvas 
                 ref={canvasRef} 
                 className="scanner-video mirrored"
@@ -859,24 +1025,33 @@ ${product.source ? `\n📡 Источник: ${product.source}` : ''}
               {scanning && (
                 <div className="scanner-overlay">
                   <div className="scanner-frame"></div>
-                  <div className="scanning-hint">Наведите на штрихкод</div>
+                  <div className="scanning-hint">
+                    {isZoomed ? '🔍 Приближено' : 'Наведите на штрихкод'}
+                  </div>
                 </div>
               )}
             </div>
             
             {scanning && (
               <div className="scanning-controls">
+                <button className="control-btn" onClick={toggleZoom}>
+                  {isZoomed ? <FaCompress /> : <FaExpand />}
+                  {isZoomed ? ' Уменьшить' : ' Приблизить'}
+                </button>
+                <button className="control-btn" onClick={toggleTorch}>
+                  {torchOn ? '🔦 Выкл' : '🔦 Вкл'}
+                </button>
                 <button className="control-btn" onClick={toggleScanning}>
-                  {isScanningPaused ? '▶️ Продолжить' : '⏸️ Пауза'}
+                  {isScanningPaused ? '▶️' : '⏸️'}
                 </button>
                 <button className="control-btn" onClick={() => {
                   stopScanner();
                   setShowManualInput(true);
                 }}>
-                  <FaKeyboard /> Ввести вручную
+                  <FaKeyboard /> Ввести
                 </button>
                 <button className="control-btn stop" onClick={stopScanner}>
-                  <FaStop /> Остановить
+                  <FaStop /> Стоп
                 </button>
               </div>
             )}
