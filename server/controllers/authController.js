@@ -239,8 +239,9 @@ export const getProfile = async (req, res) => {
         avatar,
         bio,
         location,
-        daily_calories
-      created_at
+        daily_calories,
+        created_at,
+        phone
     FROM users
     WHERE id = $1
       `,
@@ -263,23 +264,23 @@ export const updateProfile = async (req, res) => {
     const {
       name,
       email,
-      phone,
       location,
       bio,
       avatar,
-
+      
       gender,
       weight,
       height,
       age,
-
+      
       activity_level,
       goal,
-
+      
       water_goal,
       sleep_goal,
-
-      daily_calories
+      
+      daily_calories,
+      phone
     } = req.body;
 
     const result = await pool.query(
@@ -288,49 +289,38 @@ export const updateProfile = async (req, res) => {
       SET
         username=$1,
         email=$2,
-        password=$3,
-
-        gender=$4,
-        weight=$5,
-        height=$6,
-        age=$7,
-
-        activity_level=$8,
-        goal=$9,
-
-        water_goal=$10,
-        sleep_goal=$11,
-
-        avatar=$12,
-        bio=$13,
-        location=$14,
-        daily_calories=$15
-
+        gender=$3,
+        weight=$4,
+        height=$5,
+        age=$6,
+        activity_level=$7,
+        goal=$8,
+        water_goal=$9,
+        sleep_goal=$10,
+        avatar=$11,
+        bio=$12,
+        location=$13,
+        daily_calories=$14,
+        phone=$15
       WHERE id = $16
-
       RETURNING *
       `,
       [
-      name,
+        name,
         email,
-      phone,
-      location,
-      bio,
-      avatar,
-
-      gender,
-      weight,
-      height,
-      age,
-
-      activity_level,
-      goal,
-
-      water_goal,
-      sleep_goal,
-
-      daily_calories,
-
+        gender,
+        weight,
+        height,
+        age,
+        activity_level,
+        goal,
+        water_goal,
+        sleep_goal,
+        avatar,
+        bio,
+        location,
+        daily_calories,
+        phone,
         userId
       ]
     );
